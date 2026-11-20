@@ -1,0 +1,30 @@
+name: Tieni attivo Supabase
+
+# Il piano gratuito di Supabase mette in pausa il progetto dopo ~7 giorni senza attività.
+# Questo controllo fa una piccola lettura dal database ogni 3 giorni (e si può lanciare a mano).
+on:
+  schedule:
+    - cron: "17 6 */3 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Interroga il database
+        run: |
+          URL=$(grep -o 'https://[a-z0-9]*\.supabase\.co' config.js | head -1)
+          KEY=$(grep -o 'sb_publishable_[A-Za-z0-9_-]*' config.js | head -1)
+          code=$(curl -sS -o /tmp/out.txt -w '%{http_code}' -X POST "$URL/rest/v1/rpc/club_info" \
+            -H "apikey: $KEY" -H "Content-Type: application/json" -d '{"p_slug":"keepalive-check"}')
+          echo "Risposta del database: HTTP $code"; cat /tmp/out.txt; echo
+          test "$code" = "200"
+      - name: Stato delle registrazioni (solo informativo)
+        run: |
+          URL=$(grep -o 'https://[a-z0-9]*\.supabase\.co' config.js | head -1)
+          KEY=$(grep -o 'sb_publishable_[A-Za-z0-9_-]*' config.js | head -1)
+          curl -sS "$URL/auth/v1/settings" -H "apikey: $KEY" | python3 -c 'import sys,json; d=json.load(sys.stdin); print("disable_signup =", d.get("disable_signup")); print("mailer_autoconfirm =", d.get("mailer_autoconfirm"))'
