@@ -633,18 +633,18 @@ function gameView(){
       if (want.roles.length){
         let errors = 0;
         roleBoxes.forEach((b,i) => { if (b.checked !== want.roles.includes(ROLES[i])) errors++; });
-        rows.push({label:"Ruolo", yours:ROLES.filter((x,i)=>roleBoxes[i].checked).join(", ")||"—", right:want.roles.join(", "), pts:Math.max(0, 1 - 0.5*errors), max:1});
+        rows.push({label:"Ruolo", yours:ROLES.filter((x,i)=>roleBoxes[i].checked).join(", ")||"—", right:want.roles.join(", "), pts:roleBoxes.some(b=>b.checked) ? Math.max(0, 1 - 0.5*errors) : 0, max:1});
       }
       // carica nel comitato (solo se indicata)
       if (want.com.length){
         const mine = COMITATO_ROLES.filter((c,i)=>roleBoxes[comIdx].checked && comBoxes[i].checked);
         const errors = COMITATO_ROLES.filter(c => mine.includes(c) !== want.com.includes(c)).length;
-        rows.push({label:"Carica in comitato", yours:mine.join(", ")||"—", right:want.com.join(", "), pts:Math.max(0, 1 - 0.5*errors), max:1});
+        rows.push({label:"Carica in comitato", yours:mine.join(", ")||"—", right:want.com.join(", "), pts:mine.length ? Math.max(0, 1 - 0.5*errors) : 0, max:1});
       }
       // attrezzo (solo se indicato)
       if (arr(t.gear).length){
         let errors = 0; gearBoxes.forEach((b,i) => { if (b.checked !== arr(t.gear).includes(GEARS[i])) errors++; });
-        rows.push({label:"Attrezzo", yours:GEARS.filter((x,i)=>gearBoxes[i].checked).join(", ")||"—", right:arr(t.gear).join(", "), pts:Math.max(0, 1 - 0.5*errors), max:1});
+        rows.push({label:"Attrezzo", yours:GEARS.filter((x,i)=>gearBoxes[i].checked).join(", ")||"—", right:arr(t.gear).join(", "), pts:gearBoxes.some(b=>b.checked) ? Math.max(0, 1 - 0.5*errors) : 0, max:1});
       }
       [name, nick, ...roleBoxes, ...comBoxes, ...gearBoxes, check].forEach(el => el.disabled = true);
       const pts = rows.reduce((a,x)=>a+x.pts,0), max = rows.reduce((a,x)=>a+x.max,0);
