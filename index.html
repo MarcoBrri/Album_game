@@ -109,6 +109,8 @@ nav[hidden]{display:none}
 .rv .rl{color:var(--muted)}.rv .ans{color:var(--ok);font-weight:600}.rv .rp{font-weight:700;white-space:nowrap}
 .rv.ok{border-color:var(--ok)}.rv.ok .rp{color:var(--ok)}.rv.near{border-color:#d9a400}.rv.near .rp{color:#b98600}.rv.bad{border-color:var(--bad)}.rv.bad .rp{color:var(--bad)}
 .final{font-size:44px;font-weight:700;margin:10px 0}
+.linkbtn{background:none;border:0;padding:0;font:inherit;font-size:14px;color:var(--accent);text-decoration:underline;cursor:pointer;align-self:flex-start}.linkbtn[disabled]{opacity:.6;cursor:default}
+.privacy p{margin:0 0 10px;font-size:15px}
 .team.f1{background:color-mix(in srgb,#d9a400 22%,var(--surface));color:var(--ink)}
 .team.f2{background:color-mix(in srgb,#5b7fd9 22%,var(--surface));color:var(--ink)}
 .ftext{margin-top:4px}.modal.wide{max-width:560px}
@@ -136,7 +138,7 @@ details.sedwrap{border-top:1px solid var(--line);padding-top:10px}
 <div id="modal"></div>
 
 <script src="config.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/dist/umd/supabase.js" integrity="sha384-A97u3Qnt9GZHURO9YJZRe7VQgGUeFzcv6I1oIGnUTxQrCxnpQMwR0/G8F2zt9abZ" crossorigin="anonymous"></script>
 <script>
 "use strict";
 /* ---------- helpers ---------- */
@@ -233,7 +235,7 @@ function photoEl(p){
 /* ---------- Supabase: dati, accesso admin, routing ---------- */
 const CFG = window.APP_CONFIG || {};
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{2,60}$/;
-const state = { people: [], loaded:false, admin:false, shared:true, view:"dir", q:"", slug:null, company:null, notFound:false, session:null, authMsg:"", configMissing:false };
+const state = { recovery:false, people: [], loaded:false, admin:false, shared:true, view:"dir", q:"", slug:null, company:null, notFound:false, session:null, authMsg:"", configMissing:false };
 let sb = null, routeToken = 0;
 const isAdmin = () => !!state.admin;
 const fromRow = r => ({ id:r.id, name:r.name, nick:r.nick||"", data:(r.data && typeof r.data==="object") ? r.data : {}, photo:r.photo||"", approved: r.status ? r.status==="approved" : true });
@@ -261,7 +263,8 @@ async function loadPeople(){
 
 async function route(){
   const my = ++routeToken;
-  const slug = location.hash.replace(/^#/, "");
+  let slug = location.hash.replace(/^#/, "");
+  if (/(^|&)(access_token|error|type)=/.test(slug)){ history.replaceState(null, "", location.pathname); slug = ""; }
   Object.assign(state, {people:[], q:"", notFound:false, company:null, admin:false, loaded:false, view:"dir", slug:null});
   game.reset();
   if (state.configMissing){ render(); return; }
@@ -289,11 +292,14 @@ async function initData(){
   if (!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY || /INSERISCI/.test(CFG.SUPABASE_URL + CFG.SUPABASE_ANON_KEY)){
     state.configMissing = true; state.loaded = true; render(); return;
   }
+  // Rientro dal link «reimposta la password» ricevuto per email
+  if (/type=recovery/.test(location.hash)) state.recovery = true;
   sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
   const { data } = await sb.auth.getSession();
   state.session = data.session;
   sb.auth.onAuthStateChange((ev, sess) => {
     if (ev === "INITIAL_SESSION") return;
+    if (ev === "PASSWORD_RECOVERY"){ state.session = sess; state.recovery = true; if (location.hash) history.replaceState(null, "", location.pathname); setTimeout(route, 0); return; }
     state.session = sess;
     setTimeout(route, 0);
   });
@@ -312,6 +318,14 @@ async function signUp(email, password){
   return !!data.session;   // false = serve conferma via email
 }
 async function signOut(){ await sb.auth.signOut(); }
+async function sendReset(email){
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+  if (error) throw error;
+}
+async function setNewPassword(pw){
+  const { error } = await sb.auth.updateUser({ password: pw });
+  if (error) throw error;
+}
 
 async function createCompany(name, struct){
   const slug = slugify(name);
@@ -402,7 +416,8 @@ function homeView(){
   wrap.append(h("div",{class:"hero"},
     h("h2",{},"Conosci i tuoi colleghi, giocando"),
     h("p",{},"Un album con foto, nome e le informazioni che scegli tu (ruolo, reparto, sede…), e un gioco per imparare i volti. Ogni gruppo ha un link tutto suo: chi lo apre può proporre nuove persone, che compaiono dopo l'approvazione dell'amministratore.")));
-  if (!state.session) wrap.append(authBox()); else wrap.append(createBox(), mineBox());
+  if (state.recovery && state.session) wrap.append(newPasswordBox());
+  else if (!state.session) wrap.append(authBox()); else wrap.append(createBox(), mineBox());
   return wrap;
 }
 function authBox(){
@@ -417,9 +432,32 @@ function authBox(){
     try { const logged = await signUp(email.value.trim(), pw.value); if (!logged){ msg.style.color="var(--ink)"; msg.textContent="Controlla la tua email e conferma l'account, poi premi «Accedi»."; busy(false); } }
     catch(e){ msg.textContent = errText(e); busy(false); } };
   pw.addEventListener("keydown", e => { if (e.key==="Enter") inBtn.click(); });
+  const forgot = h("button",{class:"linkbtn",type:"button"},"Password dimenticata?");
+  forgot.onclick = async () => {
+    msg.style.color = ""; msg.textContent = "";
+    const em = email.value.trim();
+    if (!em){ msg.textContent = "Scrivi prima la tua email qui sopra."; email.focus(); return; }
+    forgot.disabled = true;
+    try { await sendReset(em); msg.style.color = "var(--ink)"; msg.textContent = "Se l'email è registrata, riceverai un link per scegliere una nuova password."; }
+    catch(e){ msg.textContent = /rate|seconds/i.test(e.message||"") ? "Troppi tentativi: riprova tra qualche minuto." : "Invio non riuscito. Riprova."; forgot.disabled = false; }
+  };
   return h("div",{class:"create"}, h("label",{},"Sei un amministratore?"),
     h("div",{class:"role"},"Accedi, oppure registrati, per creare e gestire la directory del tuo gruppo. I visitatori non hanno bisogno di nessun account."),
-    email, pw, h("div",{style:"display:flex;gap:8px"}, inBtn, upBtn), msg);
+    email, pw, h("div",{style:"display:flex;gap:8px"}, inBtn, upBtn), forgot, msg);
+}
+function newPasswordBox(){
+  const pw = h("input",{type:"password",autocomplete:"new-password",placeholder:"Nuova password (almeno 8 caratteri)","aria-label":"Nuova password",style:"padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font:inherit"});
+  const msg = h("div",{class:"err",role:"alert"});
+  const go = h("button",{class:"btn primary"},"Salva la nuova password");
+  go.onclick = async () => {
+    msg.textContent = "";
+    if (pw.value.length < 8){ msg.textContent = "Almeno 8 caratteri."; return; }
+    go.disabled = true;
+    try { await setNewPassword(pw.value); state.recovery = false; render(); }
+    catch(e){ msg.textContent = "Non riuscito. Richiedi un nuovo link e riprova."; go.disabled = false; }
+  };
+  pw.addEventListener("keydown", e => { if (e.key==="Enter") go.click(); });
+  return h("div",{class:"create"}, h("label",{},"Scegli una nuova password"), pw, go, msg);
 }
 function createBox(){
   const name = h("input",{type:"text",maxlength:"60",placeholder:"Nome dell'azienda o dell'associazione","aria-label":"Nome",autocomplete:"off"});
@@ -549,6 +587,27 @@ function mineBox(){
   });
   return box;
 }
+function showPrivacy(){
+  const modal = document.getElementById("modal"); const close = () => ov.remove();   // si apre sopra un eventuale modulo già aperto
+  const ov = h("div",{class:"overlay"}, h("div",{class:"modal",role:"dialog","aria-modal":"true","aria-label":"Privacy"},
+    h("h2",{},"Privacy"),
+    h("div",{class:"privacy"},
+      h("p",{},"Questo album raccoglie, per ogni persona, la foto, il nome e le informazioni previste dalla scheda del gruppo."),
+      h("p",{}, h("strong",{},"Chi vede i dati: "), "chiunque abbia il link di questo gruppo. Il link non è pubblicato da nessuna parte, ma può essere inoltrato: condividilo solo con i membri."),
+      h("p",{}, h("strong",{},"Chi decide: "), "i profili proposti compaiono solo dopo l'approvazione dell'amministratore del gruppo, che può modificarli o eliminarli in qualsiasi momento."),
+      h("p",{}, h("strong",{},"Consenso: "), "aggiungi solo persone che sono d'accordo a comparire, con una foto che hanno scelto o approvato."),
+      h("p",{}, h("strong",{},"Rimozione: "), "per correggere o far togliere un profilo (il tuo o di altri), rivolgiti all'amministratore del gruppo."),
+      h("p",{}, h("strong",{},"Dove sono i dati: "), "in un database Supabase con server nell'Unione Europea (Irlanda). Il nome che scrivi in classifica resta salvato anche nel tuo browser.")),
+    h("div",{class:"actions"}, h("button",{class:"btn primary",onclick:close},"Chiudi"))));
+  ov.addEventListener("mousedown", e => { if (e.target===ov) close(); });
+  modal.append(ov);
+}
+async function changeLink(){
+  const slug = slugify(state.company.name);
+  const { error } = await sb.from("clubs").update({ slug }).eq("id", state.company.id);
+  if (error) throw error;
+  location.hash = slug;
+}
 function shareBox(){
   const link = location.origin + location.pathname + "#" + state.slug;
   const inp = h("input",{type:"text",readonly:true,value:link,"aria-label":"Link della directory"});
@@ -563,6 +622,13 @@ function shareBox(){
     h("strong",{},"Link da condividere con i colleghi"),
     h("div",{class:"linkrow"}, inp, cp),
     h("div",{class:"role"}, state.admin ? "Chiunque apre questo link può proporre nuove persone: compaiono dopo la tua approvazione." : "Chiunque apre questo link può proporre nuove persone: compaiono dopo l'approvazione dell'amministratore."),
+    h("div",{style:"display:flex;gap:14px;flex-wrap:wrap;margin-top:6px"},
+      h("button",{class:"linkbtn",type:"button",onclick:showPrivacy},"Privacy"),
+      state.admin ? (() => { let armed = false; const b = h("button",{class:"linkbtn",type:"button"},"Cambia link");
+        b.onclick = async () => {
+          if (!armed){ armed = true; b.textContent = "Conferma: il vecchio link smetterà di funzionare"; setTimeout(()=>{ armed=false; b.textContent="Cambia link"; }, 5000); return; }
+          b.disabled = true; try { await changeLink(); } catch(e){ b.textContent = "Errore, riprova"; b.disabled = false; armed = false; }
+        }; return b; })() : null),
     state.admin ? h("a",{href:"#",class:"minelink",style:"margin-top:8px",onclick:e=>{ if (game.inProgress()){ e.preventDefault(); confirmLeave(()=>{ location.hash=""; }); } }},"← Le tue directory") : null);
 }
 
@@ -677,7 +743,7 @@ function openForm(person){
   };
   const box = h("div",{class:"modal",role:"dialog","aria-modal":"true","aria-label":"Profilo"},
     h("h2",{}, person ? "Modifica profilo" : "Aggiungi una persona"),
-    !person && !admin ? h("div",{class:"role",style:"margin:-6px 0 12px"},"Il profilo comparirà nella directory dopo l'approvazione dell'amministratore.") : null,
+    !person && !admin ? h("div",{class:"role",style:"margin:-6px 0 12px"},"Il profilo comparirà nella directory dopo l'approvazione dell'amministratore. Aggiungi solo persone che sono d'accordo a comparire. ", h("button",{class:"linkbtn",type:"button",onclick:showPrivacy},"Privacy")) : null,
     h("div",{class:"field"}, h("div",{class:"pic"}, pic,
       h("div",{}, h("button",{class:"btn",type:"button",onclick:()=>file.click()}, photo?"Cambia foto":"Scegli una foto"), file,
         h("div",{class:"role",style:"margin-top:6px"},"Meglio un volto ben visibile, da vicino.")))),

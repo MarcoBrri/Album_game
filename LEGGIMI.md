@@ -41,3 +41,10 @@ Scegli una delle due strade (servono solo i file `index.html` e `config.js`):
 Alla creazione di una directory l'amministratore sceglie un modello (Azienda, Sci club, Vuoto) e definisce quali informazioni raccogliere per ogni persona: campi di testo libero, a scelta singola o a scelta multipla, con eventuali dettagli (massimo 8 campi). Foto e nome ci sono sempre; il soprannome è facoltativo. La struttura si può cambiare in seguito dal pulsante «Modifica la scheda».
 
 Se avevi già installato una versione precedente, esegui una volta `supabase/migrazione-campi.sql` nello SQL Editor di Supabase (le directory esistenti ricevono la struttura «Sci club»). Per una nuova installazione basta `supabase/schema.sql`.
+
+## Manutenzione
+
+- **Controllo automatico**: il workflow `.github/workflows/keepalive.yml` interroga il database ogni 3 giorni, così il progetto Supabase gratuito non va in pausa. Si può lanciare a mano da GitHub → Actions → «Tieni attivo Supabase» → Run workflow. Attenzione: GitHub sospende i workflow programmati se il repository non riceve modifiche per 60 giorni (manda un'email prima): in quel caso basta riattivarlo dalla scheda Actions.
+- **Password dimenticata**: perché il link nell'email riporti all'app, in Supabase → Authentication → URL Configuration imposta come *Site URL* l'indirizzo GitHub Pages dell'app (es. `https://<utente>.github.io/<repository>/`).
+- **Registrazioni**: le nuove registrazioni admin sono disattivate (Authentication → Sign In / Providers → «Allow new users to sign up»). Per aggiungere un amministratore: Authentication → Users → Add user.
+- **Libreria Supabase**: è fissata alla versione 2.119.2 con controllo d'integrità. Per aggiornarla vanno cambiati insieme numero di versione e codice `integrity` in `index.html`.

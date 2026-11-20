@@ -4,7 +4,7 @@
 
 -- ───────────── Validazione della scheda (definita dall'admin) ─────────────
 create or replace function public.valid_fields(f jsonb) returns boolean
-language plpgsql immutable as $$
+language plpgsql immutable set search_path = public as $$
 declare fld jsonb; opt jsonb; sub jsonb; ids text[] := '{}'; v text;
 begin
   if jsonb_typeof(f) is distinct from 'array' or jsonb_array_length(f) > 8 then return false; end if;
@@ -40,7 +40,7 @@ begin
 end $$;
 
 create or replace function public.valid_person_data(f jsonb, d jsonb) returns boolean
-language plpgsql immutable as $$
+language plpgsql immutable set search_path = public as $$
 declare k text; v jsonb; fld jsonb; opt jsonb; sub jsonb; el jsonb; s text;
         ok_top text[]; ok_sub text[]; parent_of jsonb; vals text[]; tops int;
 begin
@@ -104,6 +104,7 @@ create table if not exists public.people (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+create index if not exists clubs_owner_idx on public.clubs (owner_id);
 create index if not exists people_club_status_idx on public.people (club_id, status);
 
 -- ───────────── Sicurezza (Row Level Security) ─────────────
@@ -114,13 +115,13 @@ revoke all on public.clubs, public.people from anon;
 drop policy if exists clubs_owner on public.clubs;
 create policy clubs_owner on public.clubs
   for all to authenticated
-  using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+  using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
 
 drop policy if exists people_owner on public.people;
 create policy people_owner on public.people
   for all to authenticated
-  using (exists (select 1 from public.clubs c where c.id = people.club_id and c.owner_id = auth.uid()))
-  with check (exists (select 1 from public.clubs c where c.id = people.club_id and c.owner_id = auth.uid()));
+  using (exists (select 1 from public.clubs c where c.id = people.club_id and c.owner_id = (select auth.uid())))
+  with check (exists (select 1 from public.clubs c where c.id = people.club_id and c.owner_id = (select auth.uid())));
 
 grant select, insert, update, delete on public.clubs, public.people to authenticated;
 
@@ -191,8 +192,8 @@ grant select, insert, update, delete on public.scores to authenticated;
 drop policy if exists scores_owner on public.scores;
 create policy scores_owner on public.scores
   for all to authenticated
-  using (exists (select 1 from public.clubs c where c.id = scores.club_id and c.owner_id = auth.uid()))
-  with check (exists (select 1 from public.clubs c where c.id = scores.club_id and c.owner_id = auth.uid()));
+  using (exists (select 1 from public.clubs c where c.id = scores.club_id and c.owner_id = (select auth.uid())))
+  with check (exists (select 1 from public.clubs c where c.id = scores.club_id and c.owner_id = (select auth.uid())));
 
 -- Classifica pubblica: il miglior risultato di ogni nome, ordinato per percentuale e poi per tempo.
 create or replace function public.club_scores(p_slug text, p_mode text, p_kind text)
