@@ -93,6 +93,12 @@ nav[hidden]{display:none}
 .fb{min-height:48px;margin-top:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
 .fb>.btn{min-width:60%}
 .fb{scroll-margin-bottom:110px}
+.choicecol{display:flex;flex-direction:column;gap:6px;margin-top:6px}.choicerow{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-start;margin-top:6px}
+.choicecol .btn,.choicerow .btn{text-align:left}.choicerow .btn{flex:1 1 auto;text-align:center}
+.btn[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
+.savebox{margin-top:10px;display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap}.savebox.col{flex-direction:column;align-items:stretch}
+.lb{display:grid;grid-template-columns:36px 1fr auto auto;gap:10px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:6px}
+.lb .pos{font-size:20px;text-align:center}.lb .pct{font-weight:700;color:var(--accent)}
 .okt{color:var(--ok)}.badt{color:var(--bad)}
 .reveal{background:var(--accent-soft);border-radius:12px;padding:12px;width:100%;text-align:center}
 .photo.small{width:64px;height:64px;border-radius:12px;overflow:hidden;margin:0 auto 6px;font-size:22px}
@@ -112,6 +118,7 @@ nav[hidden]{display:none}
   <nav role="tablist" id="nav" hidden>
     <button role="tab" id="tab-dir" aria-selected="true">Directory</button>
     <button role="tab" id="tab-game" aria-selected="false">Indovina chi</button>
+    <button role="tab" id="tab-board" aria-selected="false">Classifica</button>
   </nav>
 </header>
 <main id="main"></main>
@@ -254,6 +261,18 @@ async function savePerson(id, d){
   if (res.error) throw res.error;
   await loadPeople();
 }
+async function saveScore(o){
+  const { error } = await sb.rpc("submit_score", { p_slug:state.slug, p_player:o.player, p_mode:o.mode, p_kind:o.kind, p_n:o.n, p_score:o.score, p_max:o.max, p_seconds:o.seconds });
+  if (error) throw error;
+}
+async function loadScores(mode, kind){
+  const { data, error } = await sb.rpc("club_scores", { p_slug:state.slug, p_mode:mode, p_kind:kind });
+  if (error) throw error; return data || [];
+}
+async function deleteScores(player, mode, kind){
+  const { error } = await sb.from("scores").delete().eq("club_id", state.company.id).eq("player", player).eq("mode", mode).eq("kind", kind);
+  if (error) throw error;
+}
 async function removePerson(id){
   const { error } = await sb.from("people").delete().eq("id", id);
   if (error) throw error;
@@ -291,14 +310,16 @@ function render(){
   document.title = inCo ? state.company.name + " – Chi è chi" : "Chi è chi";
   document.getElementById("tab-dir").setAttribute("aria-selected", state.view==="dir");
   document.getElementById("tab-game").setAttribute("aria-selected", state.view==="game");
+  document.getElementById("tab-board").setAttribute("aria-selected", state.view==="board");
   authBar();
   if (state.configMissing) main.replaceChildren(h("div",{class:"note box"}, "Configurazione mancante: apri il file config.js e inserisci l'indirizzo e la chiave pubblica del tuo progetto Supabase (vedi LEGGIMI.md)."));
   else if (!state.slug) main.replaceChildren(homeView());
   else if (!state.company) main.replaceChildren(h("div",{class:"empty"}, state.loadError ? "Non riesco a caricare i dati. Controlla la connessione e ricarica la pagina." : "Caricamento…"));
-  else main.replaceChildren(state.view==="dir" ? dirView() : gameView());
+  else main.replaceChildren(state.view==="dir" ? dirView() : state.view==="board" ? boardView() : gameView());
 }
-document.getElementById("tab-dir").onclick = () => { state.view="dir"; render(); };
-document.getElementById("tab-game").onclick = () => { state.view="game"; game.reset(); render(); };
+document.getElementById("tab-dir").onclick = () => confirmLeave(() => { state.view="dir"; render(); });
+document.getElementById("tab-board").onclick = () => confirmLeave(() => { state.view="board"; render(); });
+document.getElementById("tab-game").onclick = () => { if (state.view!=="game"){ state.view="game"; game.reset(); render(); } };
 
 function homeView(){
   const wrap = h("div",{class:"home"});
@@ -360,7 +381,7 @@ function shareBox(){
     h("strong",{},"Link da condividere con i colleghi"),
     h("div",{class:"linkrow"}, inp, cp),
     h("div",{class:"role"}, state.admin ? "Chiunque apre questo link può proporre nuove persone: compaiono dopo la tua approvazione." : "Chiunque apre questo link può proporre nuove persone: compaiono dopo l'approvazione dell'amministratore."),
-    h("a",{href:"#",class:"minelink",style:"margin-top:8px"},"← Home"));
+    h("a",{href:"#",class:"minelink",style:"margin-top:8px",onclick:e=>{ if (game.inProgress()){ e.preventDefault(); confirmLeave(()=>{ location.hash=""; }); } }},"← Home"));
 }
 
 const isApproved = p => p.approved !== false;
@@ -535,18 +556,6 @@ function judgeText(input, target){
 const mark = (pts, max) => pts >= max ? "ok" : pts > 0 ? "near" : "bad";
 const markIcon = c => c==="ok" ? "✓" : c==="near" ? "≈" : "✗";
 
-const game = {
-  mode:"photo", rounds:[], i:0, score:0, max:0, answered:false,
-  reset(){ this.rounds=[]; this.i=0; this.score=0; this.max=0; this.answered=false; },
-  pool(){ return state.people.filter(p=>p.photo && p.name && p.approved !== false); },
-  start(){
-    const pool = this.pool(), cfg = MODES.find(m=>m.id===this.mode);
-    const picks = shuffle(pool).slice(0, Math.min(cfg.rounds, pool.length));
-    this.rounds = picks.map(p => ({ target:p, options: shuffle([p, ...shuffle(pool.filter(x=>x.id!==p.id)).slice(0,3)]) }));
-    this.i = 0; this.score = 0; this.max = 0; this.answered = false;
-  }
-};
-
 function infoLines(p){
   return h("div",{class:"chips",style:"justify-content:center"},
     roleList(p).filter(r => !(r==="Comitato" && cariche(p).length)).map(r=>h("span",{class:"team"},r)), arr(p.gear).map(g=>h("span",{class:"team gear"},g)),
@@ -560,26 +569,104 @@ function revealCard(p, withPhoto){
     infoLines(p));
 }
 
-function gameView(){
-  const wrap = h("div",{class:"game"});
-  wrap.append(h("div",{class:"modes"}, MODES.map(m =>
-    h("button",{class:"btn","aria-pressed":game.mode===m.id,onclick:()=>{game.mode=m.id;game.reset();render();}}, m.label))));
-  const pool = game.pool(), cfg = MODES.find(m=>m.id===game.mode);
+const KINDS = [{id:"10",label:"10 domande"},{id:"20",label:"20 domande"},{id:"all",label:"Completo"}];
+const kindLabel = k => k==="all" ? "Completo" : k + " domande";
+const modeLabel = id => (MODES.find(m=>m.id===id)||{}).label || id;
+const game = {
+  mode:"photo", kind:"10", phase:"setup", rounds:[], i:0, score:0, max:0, answered:false, t0:0, tEnd:0, saved:false,
+  reset(){ this.phase="setup"; this.rounds=[]; this.i=0; this.score=0; this.max=0; this.answered=false; this.tEnd=0; this.saved=false; },
+  inProgress(){ return this.phase==="play" && this.i < this.rounds.length && (this.i>0 || this.answered); },
+  pool(){ return state.people.filter(p=>p.photo && p.name && p.approved !== false); },
+  start(){
+    const pool = this.pool();
+    const n = this.kind==="all" ? pool.length : Math.min(+this.kind, pool.length);
+    const picks = shuffle(pool).slice(0, n);          // «Completo»: tutte le persone, in ordine casuale
+    this.rounds = picks.map(p => ({ target:p, options: shuffle([p, ...shuffle(pool.filter(x=>x.id!==p.id)).slice(0,3)]) }));
+    this.i = 0; this.score = 0; this.max = 0; this.answered = false; this.tEnd = 0; this.saved = false;
+    this.phase = "play"; this.t0 = Date.now();
+  }
+};
+
+// Conferma prima di uscire da una partita in corso
+function confirmLeave(then){
+  if (!game.inProgress()){ then(); return; }
+  const modal = document.getElementById("modal"); const close = () => modal.replaceChildren();
+  const yes = h("button",{class:"btn danger"},"Sì, esci"), no = h("button",{class:"btn primary"},"No, continua");
+  yes.onclick = () => { close(); game.reset(); then(); }; no.onclick = close;
+  const ov = h("div",{class:"overlay"}, h("div",{class:"modal",role:"alertdialog","aria-modal":"true"},
+    h("h2",{},"Uscire dalla partita?"),
+    h("p",{},"La partita in corso andrà persa e il punteggio non verrà salvato in classifica."),
+    h("div",{class:"actions"}, yes, no)));
+  ov.addEventListener("mousedown", e => { if (e.target===ov) close(); });
+  modal.replaceChildren(ov); no.focus();
+}
+window.addEventListener("beforeunload", e => { if (game.inProgress()){ e.preventDefault(); e.returnValue = ""; } });
+
+function setupView(wrap){
+  const pool = game.pool();
+  const cfg = MODES.find(m=>m.id===game.mode);
   if (pool.length < cfg.min){
     wrap.append(h("div",{class:"empty"}, "Servono almeno " + cfg.min + " persone con foto per giocare. Ora ce ne sono " + pool.length + ". Aggiungi o approva qualche profilo con foto dalla Directory!"));
-    return wrap;
+    return;
   }
-  if (!game.rounds.length) game.start();
+  if (game.kind !== "all" && +game.kind > pool.length) game.kind = "all";
+  const nq = game.kind==="all" ? pool.length : +game.kind;
+  wrap.append(h("div",{class:"q setup"},
+    h("h2",{},"Nuova partita"),
+    h("div",{class:"role",style:"text-align:left"},"Tipo di gioco"),
+    h("div",{class:"choicecol"}, MODES.map(m => h("button",{class:"btn","aria-pressed":game.mode===m.id,onclick:()=>{game.mode=m.id;render();}}, m.label))),
+    h("div",{class:"role",style:"text-align:left;margin-top:12px"},"Numero di domande"),
+    h("div",{class:"choicerow"}, KINDS.map(k => {
+      const disabled = k.id!=="all" && +k.id > pool.length;
+      return h("button",{class:"btn","aria-pressed":game.kind===k.id,disabled,onclick:()=>{game.kind=k.id;render();}},
+        k.id==="all" ? "Completo (" + pool.length + ")" : k.label);
+    })),
+    h("div",{class:"role",style:"margin-top:10px"}, game.kind==="all" ? "Tutte le " + pool.length + " persone, in ordine casuale." : nq + " persone scelte a caso."),
+    h("button",{class:"btn primary",style:"margin-top:14px;width:100%",onclick:()=>{game.start();render();}},"Inizia"),
+    h("div",{class:"role",style:"margin-top:8px"},"Per la classifica si confrontano partite con lo stesso tipo e lo stesso numero di domande.")));
+}
 
-  if (game.i >= game.rounds.length){
-    const ratio = game.max ? game.score / game.max : 0;
-    wrap.append(h("div",{class:"q"},
-      h("div",{class:"role"},"Risultato"),
-      h("div",{class:"final"}, fmt(game.score) + " / " + fmt(game.max)),
-      h("p",{}, ratio>=0.999 ? "Perfetto! Conosci proprio tutti." : ratio>=0.6 ? "Bene! Ancora un giro per ripassare." : "Si impara giocando: riprova."),
-      h("button",{class:"btn primary",onclick:()=>{game.start();render();}},"Gioca ancora")));
-    return wrap;
+function endView(wrap){
+  if (!game.tEnd) game.tEnd = Date.now();
+  const n = game.rounds.length, ratio = game.max ? game.score / game.max : 0;
+  const seconds = Math.max(0, Math.round((game.tEnd - game.t0) / 1000));
+  let saveBox;
+  if (game.saved){
+    saveBox = h("div",{class:"savebox"}, h("strong",{class:"okt"},"Punteggio salvato!"),
+      h("button",{class:"btn",onclick:()=>{ board.mode=game.mode; board.kind=game.kind; state.view="board"; render(); }},"Vedi la classifica"));
+  } else {
+    let saved = ""; try { saved = localStorage.getItem("album.player") || ""; } catch(e){}
+    const nm = h("input",{type:"text",maxlength:"30",placeholder:"Il tuo nome",value:saved,autocomplete:"off","aria-label":"Il tuo nome"});
+    const err = h("div",{class:"err",role:"alert"});
+    const sv = h("button",{class:"btn primary"},"Salva in classifica");
+    const go = async () => {
+      err.textContent = ""; const player = nm.value.trim();
+      if (!player){ err.textContent = "Scrivi il tuo nome."; nm.focus(); return; }
+      sv.disabled = true; sv.textContent = "Salvo…";
+      try {
+        await saveScore({player, mode:game.mode, kind:game.kind, n, score:game.score, max:game.max, seconds});
+        try { localStorage.setItem("album.player", player); } catch(e){}
+        game.saved = true; render();
+      } catch(e){ err.textContent = "Non sono riuscito a salvare. Riprova."; sv.disabled = false; sv.textContent = "Salva in classifica"; }
+    };
+    sv.onclick = go; nm.addEventListener("keydown", e => { if (e.key==="Enter") go(); });
+    saveBox = h("div",{class:"savebox col"}, h("div",{class:"role"},"Vuoi entrare in classifica? Scrivi il tuo nome."), nm, sv, err);
   }
+  wrap.append(h("div",{class:"q"},
+    h("div",{class:"role"},"Risultato · " + modeLabel(game.mode) + " · " + kindLabel(game.kind) + (game.kind==="all" ? " (" + n + ")" : "")),
+    h("div",{class:"final"}, fmt(game.score) + " / " + fmt(game.max)),
+    h("div",{class:"role"}, Math.round(ratio*100) + "% · " + Math.floor(seconds/60) + ":" + String(seconds%60).padStart(2,"0")),
+    h("p",{}, ratio>=0.999 ? "Perfetto! Conosci proprio tutti." : ratio>=0.6 ? "Bene! Ancora un giro per ripassare." : "Si impara giocando: riprova."),
+    saveBox,
+    h("div",{style:"display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap"},
+      h("button",{class:"btn primary",onclick:()=>{game.reset();render();}},"Gioca ancora"),
+      h("button",{class:"btn",onclick:()=>{ board.mode=game.mode; board.kind=game.kind; state.view="board"; render(); }},"Classifica"))));
+}
+
+function gameView(){
+  const wrap = h("div",{class:"game"});
+  if (game.phase === "setup"){ setupView(wrap); return wrap; }
+  if (game.i >= game.rounds.length){ endView(wrap); return wrap; }
   const r = game.rounds[game.i], t = r.target;
   const fb = h("div",{class:"fb"});
   const next = h("button",{class:"btn primary",onclick:()=>{game.i++;game.answered=false;render();}}, game.i+1<game.rounds.length ? "Avanti" : "Vedi il risultato");
@@ -680,6 +767,43 @@ function gameView(){
   wrap.append(
     h("div",{class:"prog"}, h("span",{},"Domanda " + (game.i+1) + " di " + game.rounds.length), h("span",{},"Punti: " + fmt(game.score))),
     h("div",{class:"q"}, body, fb));
+  return wrap;
+}
+
+/* ---------- classifica ---------- */
+const board = { mode:"photo", kind:"10" };
+function fmtTime(s){ return Math.floor(s/60) + ":" + String(s%60).padStart(2,"0"); }
+function boardView(){
+  const wrap = h("div",{class:"game board"});
+  const selM = h("select",{"aria-label":"Tipo di gioco"}, MODES.map(m=>h("option",{value:m.id,selected:m.id===board.mode},m.label)));
+  const selK = h("select",{"aria-label":"Numero di domande"}, KINDS.map(k=>h("option",{value:k.id,selected:k.id===board.kind},k.label)));
+  const box = h("div",{class:"boardbox"}, h("div",{class:"empty"},"Caricamento…"));
+  wrap.append(h("h2",{style:"margin:0 0 10px;font-size:20px"},"Classifica"),
+    h("div",{class:"bar"}, selM, selK),
+    h("div",{class:"role",style:"margin-bottom:10px"},"Ordinata per percentuale di punti; a parità, vince chi ha impiegato meno tempo. Conta il miglior risultato di ogni nome."),
+    box);
+  async function load(){
+    box.replaceChildren(h("div",{class:"empty"},"Caricamento…"));
+    try {
+      const rows = await loadScores(board.mode, board.kind);
+      box.replaceChildren();
+      if (!rows.length){ box.append(h("div",{class:"empty"},"Ancora nessun punteggio qui. Gioca una partita e salva il tuo!")); return; }
+      rows.forEach((r,i) => {
+        const pct = r.max ? Math.round(100 * Number(r.score) / Number(r.max)) : 0;
+        const del = isAdmin() ? h("button",{class:"btn small danger"},"Elimina") : null;
+        if (del){ let armed=false; del.onclick = async () => {
+          if (!armed){ armed=true; del.textContent="Conferma"; setTimeout(()=>{armed=false;del.textContent="Elimina";},4000); return; }
+          try { await deleteScores(r.player, board.mode, board.kind); load(); } catch(e){ del.textContent="Errore"; } }; }
+        box.append(h("div",{class:"lb"},
+          h("div",{class:"pos"}, i===0?"🥇":i===1?"🥈":i===2?"🥉":String(i+1)),
+          h("div",{class:"who2"}, h("div",{class:"name"}, r.player), h("div",{class:"role"}, fmt(Number(r.score)) + " / " + fmt(Number(r.max)) + " · " + fmtTime(r.seconds) + (board.kind==="all" ? " · " + r.n + " pers." : ""))),
+          h("div",{class:"pct"}, pct + "%"), del));
+      });
+    } catch(e){ box.replaceChildren(h("div",{class:"empty"},"Non riesco a caricare la classifica.")); }
+  }
+  selM.addEventListener("change", ()=>{ board.mode = selM.value; load(); });
+  selK.addEventListener("change", ()=>{ board.kind = selK.value; load(); });
+  load();
   return wrap;
 }
 
