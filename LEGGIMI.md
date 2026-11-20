@@ -35,3 +35,9 @@ Scegli una delle due strade (servono solo i file `index.html` e `config.js`):
 - **Spam**: ogni directory accetta al massimo 200 proposte in attesa. Non c'è un CAPTCHA: se il link finisse in mani sbagliate, basta rifiutare le proposte.
 - **Link**: il link contiene un codice casuale difficile da indovinare, ma chi lo riceve può inoltrarlo.
 - **Piano gratuito**: Supabase mette in pausa i progetti inattivi per più settimane; si riattivano dal pannello.
+
+## Scheda personalizzabile
+
+Alla creazione di una directory l'amministratore sceglie un modello (Azienda, Sci club, Vuoto) e definisce quali informazioni raccogliere per ogni persona: campi di testo libero, a scelta singola o a scelta multipla, con eventuali dettagli (massimo 8 campi). Foto e nome ci sono sempre; il soprannome è facoltativo. La struttura si può cambiare in seguito dal pulsante «Modifica la scheda».
+
+Se avevi già installato una versione precedente, esegui una volta `supabase/migrazione-campi.sql` nello SQL Editor di Supabase (le directory esistenti ricevono la struttura «Sci club»). Per una nuova installazione basta `supabase/schema.sql`.

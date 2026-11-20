@@ -109,6 +109,17 @@ nav[hidden]{display:none}
 .rv .rl{color:var(--muted)}.rv .ans{color:var(--ok);font-weight:600}.rv .rp{font-weight:700;white-space:nowrap}
 .rv.ok{border-color:var(--ok)}.rv.ok .rp{color:var(--ok)}.rv.near{border-color:#d9a400}.rv.near .rp{color:#b98600}.rv.bad{border-color:var(--bad)}.rv.bad .rp{color:var(--bad)}
 .final{font-size:44px;font-weight:700;margin:10px 0}
+.team.f1{background:color-mix(in srgb,#d9a400 22%,var(--surface));color:var(--ink)}
+.team.f2{background:color-mix(in srgb,#5b7fd9 22%,var(--surface));color:var(--ink)}
+.ftext{margin-top:4px}.modal.wide{max-width:560px}
+.sedwrap summary{cursor:pointer;font-weight:600}.sed{margin-top:6px}
+.sedfield{border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:10px;background:var(--bg)}
+.sedhead{display:flex;gap:6px;flex-wrap:wrap;align-items:center}.sedhead input[type=text]{flex:1 1 150px}
+.sedopts{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+.sedopt{display:flex;gap:4px;align-items:center}.sedopt input[type=text]{flex:1 1 auto}
+.sedsubs{margin:4px 0 6px 18px;padding-left:10px;border-left:3px solid var(--accent);display:flex;flex-direction:column;gap:6px}
+.ib{padding:5px 9px;white-space:nowrap}
+details.sedwrap{border-top:1px solid var(--line);padding-top:10px}
 </style>
 </head>
 <body>
@@ -144,14 +155,73 @@ function h(tag, attrs, ...kids){
 }
 const initials = n => (n||"?").trim().split(/\s+/).slice(0,2).map(s=>s[0]||"").join("").toUpperCase();
 const shuffle = a => { a = a.slice(); for (let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; };
-const ROLES = ["Aiutomonitore","Monitore","Comitato"], GEARS = ["Sci","Snowboard"];
-// Cariche del comitato, come elencate nella pagina Team di sciclubpregassona.ch
-const COMITATO_ROLES = ["Presidente","Vice Presidente","Team Coach","Segretaria","Cassiere","Responsabile Eventi","Responsabile Sito/Area soci","Responsabile PR","Responsabile attività invernali","Membro di comitato"];
 const arr = v => Array.isArray(v) ? v : [];
-const cariche = p => { const l = arr(p.comitato).map(c => c==="Vice Presidente e Responsabile Formazione" ? "Vice Presidente" : c); return COMITATO_ROLES.filter(c => l.includes(c)); };
-function roleList(p){ const has = ROLES.filter(r => arr(p.roles).includes(r)); return [...cariche(p), ...has.filter(r => r==="Comitato"), ...has.filter(r => r!=="Comitato")]; }
-const roleText = p => roleList(p).join(", ");
 const fullLabel = p => (p.name||"—") + (p.nick ? " «" + p.nick + "»" : "");
+/* ---------- struttura della scheda (la definisce l'admin di ogni directory) ---------- */
+const FIELD_TYPES = [{id:"text",label:"Testo libero"},{id:"single",label:"Scelta singola"},{id:"multi",label:"Scelta multipla"}];
+const MAX_FIELDS = 8;
+const rid = p => p + Math.random().toString(36).slice(2, 8).padEnd(6, "0");
+const TEMPLATES = [
+  {id:"azienda", label:"Azienda", useNick:true, fields:[
+    {id:"reparto",label:"Reparto",type:"single",options:["Direzione","Amministrazione","Vendite","Marketing","Produzione","IT","Risorse umane"].map((l,i)=>({id:"d_"+i,label:l}))},
+    {id:"ruolo",label:"Ruolo",type:"text"},
+    {id:"sede",label:"Sede",type:"text"}]},
+  {id:"sci", label:"Sci club", useNick:true, fields:[
+    {id:"ruolo",label:"Ruolo",type:"multi",options:[
+      {id:"aiuto",label:"Aiutomonitore"},{id:"monitore",label:"Monitore"},
+      {id:"comitato",label:"Comitato",sub:[["c_pres","Presidente"],["c_vice","Vice Presidente"],["c_coach","Team Coach"],["c_segr","Segretaria"],["c_cass","Cassiere"],["c_eventi","Responsabile Eventi"],["c_sito","Responsabile Sito/Area soci"],["c_pr","Responsabile PR"],["c_inv","Responsabile attività invernali"],["c_membro","Membro di comitato"]].map(([id,label])=>({id,label}))}]},
+    {id:"attrezzo",label:"Attrezzo",type:"multi",options:[{id:"sci",label:"Sci"},{id:"snow",label:"Snowboard"}]}]},
+  {id:"vuoto", label:"Vuoto", useNick:false, fields:[]}
+];
+const fieldsOf = () => (state.company && state.company.fields) || [];
+const hasSub = o => arr(o.sub).length > 0;
+const textOf = (f, p) => f.type==="text" ? String((p.data||{})[f.id]||"").trim() : "";
+// Etichette da mostrare per un campo a scelta: prima i dettagli scelti (es. la carica), poi la scelta che ha dettagli ma senza dettaglio scelto, poi le altre.
+function chipLabels(f, p){
+  if (f.type==="text") return [];
+  const ids = arr((p.data||{})[f.id]);
+  const subs = [], bare = [], plain = [];
+  for (const o of arr(f.options)){
+    if (!ids.includes(o.id)) continue;
+    if (hasSub(o)){ const picked = o.sub.filter(s => ids.includes(s.id)); if (picked.length) subs.push(...picked.map(s=>s.label)); else bare.push(o.label); }
+    else plain.push(o.label);
+  }
+  return [...subs, ...bare, ...plain];
+}
+function searchText(p){ return [p.name, p.nick, ...fieldsOf().flatMap(f => [textOf(f,p), ...chipLabels(f,p)])].join(" ").toLowerCase(); }
+function detailBits(p){
+  const fs = fieldsOf();
+  return {
+    chips: fs.flatMap((f,i) => chipLabels(f,p).map(l => h("span",{class:"team f"+(i%3)}, l))),
+    texts: fs.filter(f => textOf(f,p)).map(f => h("div",{class:"role ftext"}, f.label + ": " + textOf(f,p)))
+  };
+}
+// Controlli per compilare un campo (usato dal modulo e dal gioco «Super hard»)
+function fieldInput(f, initial){
+  if (f.type==="text"){
+    const inp = h("input",{type:"text",maxlength:"100",value:typeof initial==="string"?initial:"",autocomplete:"off","aria-label":f.label});
+    return {el:inp, controls:[inp], get:()=>inp.value.trim(), main:inp};
+  }
+  const ids = arr(initial), single = f.type==="single", gname = rid("g");
+  const none = single ? h("input",{type:"radio",name:gname,value:"",checked:!f.options.some(o=>ids.includes(o.id))}) : null;
+  const entries = f.options.map(o => {
+    const box = h("input",{type:single?"radio":"checkbox",name:single?gname:null,value:o.id,checked:ids.includes(o.id)});
+    const subBoxes = arr(o.sub).map(s => h("input",{type:"checkbox",value:s.id,checked:ids.includes(s.id)}));
+    const panel = subBoxes.length ? h("div",{class:"companel",style:"display:none"},
+      h("div",{class:"role",style:"margin-bottom:4px"}, "Per «" + o.label + "»"),
+      h("div",{class:"checks col"}, o.sub.map((s,i) => h("label",{}, subBoxes[i], s.label)))) : null;
+    return {o, box, subBoxes, panel};
+  });
+  const sync = () => entries.forEach(e => { if (e.panel) e.panel.style.display = e.box.checked ? "block" : "none"; });
+  entries.forEach(e => e.box.addEventListener("change", sync));
+  if (none) none.addEventListener("change", sync);
+  sync();
+  return {
+    el: h("div",{}, h("div",{class:"checks"}, none ? h("label",{}, none, "Nessuna") : null, entries.map(e => h("label",{}, e.box, e.o.label))), entries.map(e => e.panel)),
+    controls: [none, ...entries.flatMap(e => [e.box, ...e.subBoxes])].filter(Boolean),
+    get: () => entries.flatMap(e => e.box.checked ? [e.o.id, ...e.subBoxes.filter(b => b.checked).map(b => b.value)] : [])
+  };
+}
 const sortName = (a,b) => (a.name||"").localeCompare(b.name||"", "it", {sensitivity:"base"});
 function photoEl(p){
   const box = h("div", {class:"photo"});
@@ -166,7 +236,7 @@ const SLUG_RE = /^[a-z0-9][a-z0-9-]{2,60}$/;
 const state = { people: [], loaded:false, admin:false, shared:true, view:"dir", q:"", slug:null, company:null, notFound:false, session:null, authMsg:"", configMissing:false };
 let sb = null, routeToken = 0;
 const isAdmin = () => !!state.admin;
-const fromRow = r => ({ id:r.id, name:r.name, nick:r.nick||"", roles:r.roles||[], comitato:r.comitato||[], gear:r.gear||[], photo:r.photo||"", approved: r.status ? r.status==="approved" : true });
+const fromRow = r => ({ id:r.id, name:r.name, nick:r.nick||"", data:(r.data && typeof r.data==="object") ? r.data : {}, photo:r.photo||"", approved: r.status ? r.status==="approved" : true });
 
 function slugify(name){
   const base = name.normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase()
@@ -180,10 +250,10 @@ async function loadPeople(){
   if (!state.company) return;
   let rows = [];
   if (state.admin){
-    const { data, error } = await sb.from("people").select("id,name,nick,roles,comitato,gear,photo,status").eq("club_id", state.company.id).order("name");
+    const { data, error } = await sb.from("people").select("id,name,nick,data,photo,status").eq("club_id", state.company.id).order("name");
     if (error) throw error; rows = data || [];
   } else {
-    const { data, error } = await sb.rpc("club_people", { p_slug: state.slug });
+    const { data, error } = await sb.rpc("club_members", { p_slug: state.slug });
     if (error) throw error; rows = (data || []).map(r => Object.assign({status:"approved"}, r));
   }
   state.people = rows.map(fromRow); state.loaded = true; render();
@@ -199,11 +269,11 @@ async function route(){
   if (!SLUG_RE.test(slug)){ state.notFound = true; state.loaded = true; render(); return; }
   state.slug = slug; render();
   try {
-    const { data, error } = await sb.rpc("club_by_slug", { p_slug: slug });
+    const { data, error } = await sb.rpc("club_info", { p_slug: slug });
     if (my !== routeToken) return;
     const club = !error && data && data[0];
     if (!club){ state.slug = null; state.notFound = true; state.loaded = true; render(); return; }
-    state.company = { id: club.id, name: club.name };
+    state.company = { id: club.id, name: club.name, fields: Array.isArray(club.fields) ? club.fields : [], useNick: club.use_nick !== false };
     if (state.session){
       const own = await sb.from("clubs").select("id").eq("slug", slug).maybeSingle();   // le regole di sicurezza restituiscono la riga solo al proprietario
       if (my !== routeToken) return;
@@ -243,16 +313,21 @@ async function signUp(email, password){
 }
 async function signOut(){ await sb.auth.signOut(); }
 
-async function createCompany(name){
+async function createCompany(name, struct){
   const slug = slugify(name);
-  const { error } = await sb.from("clubs").insert({ name, slug });
+  const { error } = await sb.from("clubs").insert({ name, slug, fields: struct.fields, use_nick: struct.useNick });
   if (error) throw error;
   location.hash = slug;
 }
+async function saveStructure(struct){
+  const { error } = await sb.from("clubs").update({ fields: struct.fields, use_nick: struct.useNick }).eq("id", state.company.id);
+  if (error) throw error;
+  state.company.fields = struct.fields; state.company.useNick = struct.useNick;
+}
 async function savePerson(id, d){
-  const row = { name:d.name, nick:d.nick||"", roles:d.roles||[], comitato:d.comitato||[], gear:d.gear||[], photo:d.photo||"", status: d.approved===false ? "pending" : "approved" };
+  const row = { name:d.name, nick:d.nick||"", data:d.data||{}, photo:d.photo||"", status: d.approved===false ? "pending" : "approved" };
   if (!state.admin){
-    const { error } = await sb.rpc("submit_person", { p_slug:state.slug, p_name:row.name, p_nick:row.nick, p_roles:row.roles, p_comitato:row.comitato, p_gear:row.gear, p_photo:row.photo });
+    const { error } = await sb.rpc("submit_member", { p_slug:state.slug, p_name:row.name, p_nick:row.nick, p_data:row.data, p_photo:row.photo });
     if (error) throw error; return;
   }
   row.updated_at = new Date().toISOString();
@@ -326,7 +401,7 @@ function homeView(){
   if (state.notFound) wrap.append(h("div",{class:"note box"},"Questa directory non esiste o il link non è corretto. Controlla il link che ti hanno inviato."));
   wrap.append(h("div",{class:"hero"},
     h("h2",{},"Conosci i tuoi colleghi, giocando"),
-    h("p",{},"Una directory con foto, nome, soprannome, ruolo e attrezzo, e un gioco per imparare i volti. Ogni gruppo ha un link tutto suo: chi lo apre può proporre nuove persone, che compaiono dopo l'approvazione dell'amministratore.")));
+    h("p",{},"Un album con foto, nome e le informazioni che scegli tu (ruolo, reparto, sede…), e un gioco per imparare i volti. Ogni gruppo ha un link tutto suo: chi lo apre può proporre nuove persone, che compaiono dopo l'approvazione dell'amministratore.")));
   if (!state.session) wrap.append(authBox()); else wrap.append(createBox(), mineBox());
   return wrap;
 }
@@ -350,14 +425,121 @@ function createBox(){
   const name = h("input",{type:"text",maxlength:"60",placeholder:"Nome dell'azienda o dell'associazione","aria-label":"Nome",autocomplete:"off"});
   const err = h("div",{class:"err",role:"alert"});
   const go = h("button",{class:"btn primary"},"Crea la directory");
+  const ed = structureEditor(TEMPLATES[0], {templates:true});
   async function submit(){
     err.textContent = ""; const n = name.value.trim();
     if (n.length < 2){ err.textContent = "Inserisci il nome."; return; }
+    let struct; try { struct = ed.get(); } catch(e){ err.textContent = e.message; return; }
     go.disabled = true; go.textContent = "Creo…";
-    try { await createCompany(n); } catch(e){ err.textContent = "Non sono riuscito a creare la directory. Riprova."; go.disabled = false; go.textContent = "Crea la directory"; }
+    try { await createCompany(n, struct); } catch(e){ err.textContent = "Non sono riuscito a creare la directory. Riprova."; go.disabled = false; go.textContent = "Crea la directory"; }
   }
   go.onclick = submit; name.addEventListener("keydown", e => { if (e.key==="Enter") submit(); });
-  return h("div",{class:"create"}, h("label",{},"Crea una nuova directory"), name, go, err);
+  return h("div",{class:"create"}, h("label",{},"Crea una nuova directory"), name,
+    h("details",{open:true,class:"sedwrap"}, h("summary",{},"Scheda di ogni persona"), 
+      h("div",{class:"role",style:"margin:6px 0 8px"},"Foto e nome ci sono sempre. Scegli quali altre informazioni raccogliere: puoi partire da un modello e cambiarlo."), ed.el),
+    go, err);
+}
+
+// Editor della struttura della scheda: campi (testo / scelta singola / scelta multipla), scelte e dettagli
+function structureEditor(init, opts){
+  opts = opts || {};
+  const work = { useNick: init.useNick !== false, fields: JSON.parse(JSON.stringify(init.fields || [])) };
+  const root = h("div",{class:"sed"});
+  const ib = (t, fn, label, dis) => h("button",{class:"btn small ib",type:"button","aria-label":label||t,title:label||t,disabled:dis,onclick:fn}, t);
+  const move = (a, i, d) => { const j = i + d; if (j<0 || j>=a.length) return; [a[i], a[j]] = [a[j], a[i]]; draw(); };
+  const bind = (inp, obj) => { inp.addEventListener("input", () => { obj.label = inp.value; }); return inp; };
+  function optEd(f, o, k){
+    const row = h("div",{class:"sedopt"},
+      bind(h("input",{type:"text",maxlength:"60",value:o.label,placeholder:"Scelta","aria-label":"Scelta"}), o),
+      ib("↑", () => move(f.options,k,-1), "Sposta su", k===0), ib("↓", () => move(f.options,k,1), "Sposta giù", k===f.options.length-1),
+      ib("✕", () => { f.options.splice(k,1); draw(); }, "Elimina la scelta"));
+    const box = h("div",{}, row);
+    if (Array.isArray(o.sub)){
+      const subs = h("div",{class:"sedsubs"}, h("div",{class:"role"},"Dettagli di «" + (o.label||"…") + "» (si possono scegliere solo se è selezionata)"));
+      o.sub.forEach((sb_, m) => subs.append(h("div",{class:"sedopt"},
+        bind(h("input",{type:"text",maxlength:"60",value:sb_.label,placeholder:"Dettaglio","aria-label":"Dettaglio"}), sb_),
+        ib("✕", () => { o.sub.splice(m,1); if (!o.sub.length) delete o.sub; draw(); }, "Elimina il dettaglio"))));
+      subs.append(h("div",{style:"display:flex;gap:6px;flex-wrap:wrap"},
+        ib("＋ Dettaglio", () => { o.sub.push({id:rid("s"),label:""}); draw(); }, "Aggiungi un dettaglio", o.sub.length>=30),
+        ib("Togli i dettagli", () => { delete o.sub; draw(); }, "Togli i dettagli")));
+      box.append(subs);
+    } else {
+      row.append(ib("＋ dettagli", () => { o.sub = [{id:rid("s"),label:""}]; draw(); }, "Aggiungi dettagli a questa scelta"));
+    }
+    return box;
+  }
+  function fieldEd(f, i){
+    const type = h("select",{"aria-label":"Tipo di campo"}, FIELD_TYPES.map(t => h("option",{value:t.id,selected:t.id===f.type}, t.label)));
+    type.addEventListener("change", () => { f.type = type.value; if (f.type!=="text" && !arr(f.options).length) f.options = [{id:rid("o"),label:""}]; draw(); });
+    const card = h("div",{class:"sedfield"},
+      h("div",{class:"sedhead"},
+        bind(h("input",{type:"text",maxlength:"40",value:f.label,placeholder:"Nome del campo (es. Reparto)","aria-label":"Nome del campo"}), f), type,
+        ib("↑", () => move(work.fields,i,-1), "Sposta il campo su", i===0), ib("↓", () => move(work.fields,i,1), "Sposta il campo giù", i===work.fields.length-1),
+        ib("✕", () => { work.fields.splice(i,1); draw(); }, "Elimina il campo")));
+    if (f.type!=="text"){
+      const list = h("div",{class:"sedopts"}, arr(f.options).map((o,k) => optEd(f,o,k)));
+      list.append(ib("＋ Scelta", () => { f.options.push({id:rid("o"),label:""}); draw(); }, "Aggiungi una scelta", arr(f.options).length>=30));
+      card.append(list);
+    }
+    return card;
+  }
+  function draw(){
+    root.replaceChildren();
+    if (opts.templates){
+      root.append(h("div",{class:"role"},"Modello di partenza"),
+        h("div",{class:"choicerow",style:"margin-bottom:10px"}, TEMPLATES.map(t => h("button",{class:"btn small",type:"button",onclick:() => {
+          work.fields = JSON.parse(JSON.stringify(t.fields)); work.useNick = t.useNick; draw();
+        }}, t.label))));
+    }
+    const nick = h("input",{type:"checkbox",checked:work.useNick});
+    nick.addEventListener("change", () => { work.useNick = nick.checked; });
+    root.append(h("div",{class:"checks",style:"margin-bottom:10px"}, h("label",{}, nick, "Chiedi anche il soprannome")));
+    work.fields.forEach((f,i) => root.append(fieldEd(f,i)));
+    root.append(h("button",{class:"btn small",type:"button",disabled:work.fields.length>=MAX_FIELDS,onclick:() => { work.fields.push({id:rid("f"),label:"",type:"text"}); draw(); }},
+      "＋ Aggiungi un campo" + (work.fields.length>=MAX_FIELDS ? " (massimo " + MAX_FIELDS + ")" : "")));
+  }
+  function get(){
+    const out = [];
+    for (const f of work.fields){
+      const label = f.label.trim();
+      if (!label) throw new Error("Dai un nome a ogni campo.");
+      const nf = {id:f.id, label, type:f.type};
+      if (f.type!=="text"){
+        nf.options = [];
+        for (const o of arr(f.options)){
+          const ol = o.label.trim(); if (!ol) continue;
+          const no = {id:o.id, label:ol};
+          const subs = arr(o.sub).map(x => ({id:x.id, label:x.label.trim()})).filter(x => x.label);
+          if (subs.length) no.sub = subs;
+          nf.options.push(no);
+        }
+        if (!nf.options.length) throw new Error("«" + label + "»: aggiungi almeno una scelta.");
+      }
+      out.push(nf);
+    }
+    return {fields:out, useNick:work.useNick};
+  }
+  draw();
+  return {el:root, get};
+}
+function openStructure(){
+  const modal = document.getElementById("modal"); const close = () => modal.replaceChildren();
+  const ed = structureEditor({fields:state.company.fields, useNick:state.company.useNick});
+  const err = h("div",{class:"err",role:"alert"});
+  const save = h("button",{class:"btn primary"},"Salva la scheda");
+  save.onclick = async () => {
+    err.textContent = "";
+    let st; try { st = ed.get(); } catch(e){ err.textContent = e.message; return; }
+    save.disabled = true; save.textContent = "Salvo…";
+    try { await saveStructure(st); close(); render(); }
+    catch(e){ err.textContent = "Salvataggio non riuscito. Riprova."; save.disabled = false; save.textContent = "Salva la scheda"; }
+  };
+  const ov = h("div",{class:"overlay"}, h("div",{class:"modal wide",role:"dialog","aria-modal":"true","aria-label":"Scheda di ogni persona"},
+    h("h2",{},"Scheda di ogni persona"),
+    h("div",{class:"role",style:"margin-bottom:10px"},"Foto e nome ci sono sempre. Se elimini un campo o una scelta, i dati già inseriti per quella voce non vengono più mostrati."),
+    ed.el, err, h("div",{class:"actions"}, h("button",{class:"btn",onclick:close},"Annulla"), save)));
+  ov.addEventListener("mousedown", e => { if (e.target===ov) close(); });
+  modal.replaceChildren(ov);
 }
 function mineBox(){
   const box = h("div",{class:"mine"}, h("h3",{},"Le tue directory"));
@@ -387,12 +569,13 @@ function shareBox(){
 const isApproved = p => p.approved !== false;
 const stripId = p => { const o = Object.assign({}, p); delete o.id; return o; };
 function personCard(p, actions){
+  const d = detailBits(p);
   return h("div",{class:"card"},
     photoEl(p),
     h("div",{class:"info"},
       h("div",{class:"name"}, p.name||"—"),
       p.nick ? h("div",{class:"nick"}, "«" + p.nick + "»") : null,
-      h("div",{class:"chips"}, roleList(p).filter(r => !(r==="Comitato" && cariche(p).length)).map(r=>h("span",{class:"team"},r)), arr(p.gear).map(g=>h("span",{class:"team gear"},g)))),
+      h("div",{class:"chips"}, d.chips), d.texts),
     actions ? h("div",{class:"cardact"}, actions) : null);
 }
 function pendingPanel(list){
@@ -423,16 +606,17 @@ function dirView(){
   const pend = state.people.filter(p=>!isApproved(p)).sort(sortName);
   if (admin && pend.length) wrap.append(pendingPanel(pend));
 
-  const search = h("input",{type:"search",placeholder:"Cerca per nome, soprannome o ruolo…",value:state.q,"aria-label":"Cerca"});
+  const search = h("input",{type:"search",placeholder:"Cerca per nome o informazioni…",value:state.q,"aria-label":"Cerca"});
   const count = h("span",{class:"count"});
   const grid = h("div",{class:"grid"});
   wrap.append(h("div",{class:"bar"}, search,
-    h("button",{class:"btn primary",onclick:()=>openForm(null)}, "Aggiungi una persona"), count), grid);
+    h("button",{class:"btn primary",onclick:()=>openForm(null)}, "Aggiungi una persona"),
+    admin ? h("button",{class:"btn",onclick:openStructure}, "Modifica la scheda") : null, count), grid);
 
   function draw(){
     const q = state.q.trim().toLowerCase();
     const all = state.people.filter(isApproved);
-    const list = all.filter(p => !q || [p.name,p.nick,roleText(p),arr(p.gear).join(" ")].some(v => (v||"").toLowerCase().includes(q))).sort(sortName);
+    const list = all.filter(p => !q || searchText(p).includes(q)).sort(sortName);
     count.textContent = list.length + (list.length===1 ? " persona" : " persone");
     grid.replaceChildren();
     if (!list.length){
@@ -456,16 +640,8 @@ function openForm(person){
   let photo = person ? (person.photo||"") : "";
   const name = h("input",{type:"text",maxlength:"80",value:person?person.name||"":"",autocomplete:"off"});
   const nick = h("input",{type:"text",maxlength:"40",value:person?person.nick||"":"",autocomplete:"off"});
-  const curRoles = person ? arr(person.roles) : [];
-  const curCom = person ? cariche(person) : [];
-  const curGear = person ? arr(person.gear) : [];
-  const roleBoxes = ROLES.map(r => h("input",{type:"checkbox",value:r,checked:curRoles.includes(r)}));
-  const comBoxes = COMITATO_ROLES.map(c => h("input",{type:"checkbox",value:c,checked:curCom.includes(c)}));
-  const comPanel = h("div",{class:"companel",style:"display:"+(curRoles.includes("Comitato")?"block":"none")},
-    h("div",{class:"role",style:"margin-bottom:4px"},"Carica nel comitato"),
-    h("div",{class:"checks col"}, COMITATO_ROLES.map((c,i)=>h("label",{}, comBoxes[i], c))));
-  roleBoxes[ROLES.indexOf("Comitato")].addEventListener("change", e => { comPanel.style.display = e.target.checked ? "block" : "none"; });
-  const gearBoxes = GEARS.map(g => h("input",{type:"checkbox",value:g,checked:curGear.includes(g)}));
+  const fs = fieldsOf(), useNick = !!(state.company && state.company.useNick);
+  const inputs = fs.map(f => fieldInput(f, person ? (person.data||{})[f.id] : undefined));
   const err = h("div",{class:"err",role:"alert"});
   const pic = h("div",{class:"photo"});
   const drawPic = () => { pic.replaceChildren(); if (photo) pic.append(h("img",{src:photo,alt:""})); else pic.textContent = initials(name.value); };
@@ -491,7 +667,8 @@ function openForm(person){
     if (!name.value.trim()){ err.textContent = "Inserisci nome e cognome."; return; }
     save.disabled = true; save.textContent = "Salvo…";
     try {
-      await savePerson(id, {name:name.value.trim(), nick:nick.value.trim(), roles:roleBoxes.filter(b=>b.checked).map(b=>b.value), comitato:(roleBoxes[ROLES.indexOf("Comitato")].checked ? comBoxes.filter(b=>b.checked).map(b=>b.value) : []), gear:gearBoxes.filter(b=>b.checked).map(b=>b.value), photo, approved: person ? isApproved(person) : admin, updated:Date.now()});
+      const data = {}; fs.forEach((f,i) => { const v = inputs[i].get(); if (f.type==="text" ? v : v.length) data[f.id] = v; });
+      await savePerson(id, {name:name.value.trim(), nick:useNick ? nick.value.trim() : "", data, photo, approved: person ? isApproved(person) : admin, updated:Date.now()});
       if (!admin && !person) { thanks(); } else close();
     } catch(e){
       err.textContent = "Salvataggio non riuscito. Riprova tra poco.";
@@ -505,9 +682,8 @@ function openForm(person){
       h("div",{}, h("button",{class:"btn",type:"button",onclick:()=>file.click()}, photo?"Cambia foto":"Scegli una foto"), file,
         h("div",{class:"role",style:"margin-top:6px"},"Meglio un volto ben visibile, da vicino.")))),
     h("div",{class:"field"}, h("label",{},"Nome e cognome"), name),
-    h("div",{class:"field"}, h("label",{},"Soprannome"), nick),
-    h("div",{class:"field"}, h("label",{},"Ruolo"), h("div",{class:"checks"}, ROLES.map((r,i)=>h("label",{}, roleBoxes[i], r))), comPanel),
-    h("div",{class:"field"}, h("label",{},"Attrezzo"), h("div",{class:"checks"}, GEARS.map((g,i)=>h("label",{}, gearBoxes[i], g)))),
+    useNick ? h("div",{class:"field"}, h("label",{},"Soprannome"), nick) : null,
+    fs.map((f,i) => h("div",{class:"field"}, h("label",{}, f.label), inputs[i].el)),
     err,
     h("div",{class:"actions"}, del, h("button",{class:"btn",onclick:close},"Annulla"), save));
   function thanks(){
@@ -525,7 +701,6 @@ function openForm(person){
 }
 
 /* ---------- game ---------- */
-function roleSet(p){ return {roles: ROLES.filter(r=>arr(p.roles).includes(r)), com: cariche(p), gear: GEARS.filter(g=>arr(p.gear).includes(g))}; }
 const MODES = [
   {id:"photo", label:"Foto → Nome", min:4, rounds:10},
   {id:"name",  label:"Nome → Foto", min:4, rounds:10},
@@ -557,9 +732,40 @@ const mark = (pts, max) => pts >= max ? "ok" : pts > 0 ? "near" : "bad";
 const markIcon = c => c==="ok" ? "✓" : c==="near" ? "≈" : "✗";
 
 function infoLines(p){
-  return h("div",{class:"chips",style:"justify-content:center"},
-    roleList(p).filter(r => !(r==="Comitato" && cariche(p).length)).map(r=>h("span",{class:"team"},r)), arr(p.gear).map(g=>h("span",{class:"team gear"},g)),
-    !roleList(p).length && !arr(p.gear).length ? h("span",{class:"role"},"Nessun ruolo o attrezzo indicato") : null);
+  const d = detailBits(p);
+  return h("div",{},
+    d.chips.length ? h("div",{class:"chips",style:"justify-content:center"}, d.chips) : null, d.texts,
+    fieldsOf().length && !d.chips.length && !d.texts.length ? h("span",{class:"role"},"Nessuna informazione aggiuntiva indicata") : null);
+}
+// Righe del punteggio «Super hard» per un campo della scheda
+function fieldRows(f, t, input){
+  const rows = [];
+  if (f.type==="text"){
+    const want = textOf(f, t); if (!want) return rows;          // la persona non ha questo dato: nessuna domanda
+    const got = input.get();
+    rows.push({label:f.label, yours:got||"—", right:want, pts:judgeText(got, want), max:1});
+    return rows;
+  }
+  const want = arr((t.data||{})[f.id]), got = input.get();
+  const lab = id => { for (const o of f.options){ if (o.id===id) return o.label; for (const s of arr(o.sub)) if (s.id===id) return s.label; } return id; };
+  const plain = f.options.filter(o => !hasSub(o)), withSub = f.options.filter(hasSub);
+  const wp = plain.filter(o => want.includes(o.id)).map(o => o.id), gp = plain.filter(o => got.includes(o.id)).map(o => o.id);
+  if (wp.length || gp.length){                                  // scelte semplici: 1 punto se esatte
+    const same = wp.length===gp.length && wp.every(x => gp.includes(x));
+    rows.push({label:f.label, yours:gp.map(lab).join(", ")||"—", right:wp.map(lab).join(", ")||"nessuno", pts:same?1:0, max:1});
+  }
+  for (const o of withSub){                                     // scelte con dettagli: 0,5 + 0,5
+    const w = want.includes(o.id), g = got.includes(o.id);
+    if (!w && !g) continue;
+    rows.push({label:o.label, yours:g?"Sì":"No", right:w?"Sì":"No", pts:(w && g) ? 0.5 : 0, max:0.5});
+    const ws = o.sub.filter(x => want.includes(x.id)).map(x => x.id);
+    if (w && ws.length){
+      const gs = g ? o.sub.filter(x => got.includes(x.id)).map(x => x.id) : [];
+      const same = gs.length===ws.length && ws.every(x => gs.includes(x));
+      rows.push({label:"↳ " + o.label, yours:gs.map(lab).join(", ")||"—", right:ws.map(lab).join(", "), pts:same?0.5:0, max:0.5});
+    }
+  }
+  return rows;
 }
 function revealCard(p, withPhoto){
   return h("div",{class:"reveal"},
@@ -605,25 +811,23 @@ window.addEventListener("beforeunload", e => { if (game.inProgress()){ e.prevent
 function setupView(wrap){
   const pool = game.pool();
   const cfg = MODES.find(m=>m.id===game.mode);
-  if (pool.length < cfg.min){
-    wrap.append(h("div",{class:"empty"}, "Servono almeno " + cfg.min + " persone con foto per giocare. Ora ce ne sono " + pool.length + ". Aggiungi o approva qualche profilo con foto dalla pagina Impara!"));
-    return;
-  }
+  const enough = pool.length >= cfg.min;
   if (game.kind !== "all" && +game.kind > pool.length) game.kind = "all";
   const nq = game.kind==="all" ? pool.length : +game.kind;
   wrap.append(h("div",{class:"q setup"},
     h("h2",{},"Nuova partita"),
     h("div",{class:"role",style:"text-align:left"},"Tipo di gioco"),
     h("div",{class:"choicecol"}, MODES.map(m => h("button",{class:"btn","aria-pressed":game.mode===m.id,onclick:()=>{game.mode=m.id;render();}}, m.label))),
-    h("div",{class:"role",style:"text-align:left;margin-top:12px"},"Numero di domande"),
-    h("div",{class:"choicerow"}, KINDS.map(k => {
-      const disabled = k.id!=="all" && +k.id > pool.length;
-      return h("button",{class:"btn","aria-pressed":game.kind===k.id,disabled,onclick:()=>{game.kind=k.id;render();}},
-        k.id==="all" ? "Completo (" + pool.length + ")" : k.label);
-    })),
-    h("div",{class:"role",style:"margin-top:10px"}, game.kind==="all" ? "Tutte le " + pool.length + " persone, in ordine casuale." : nq + " persone scelte a caso."),
-    h("button",{class:"btn primary",style:"margin-top:14px;width:100%",onclick:()=>{game.start();render();}},"Inizia"),
-    h("div",{class:"role",style:"margin-top:8px"},"Per la classifica si confrontano partite con lo stesso tipo e lo stesso numero di domande.")));
+    !enough ? h("div",{class:"empty"}, "Per questo gioco servono almeno " + cfg.min + " persone con foto. Ora ce ne sono " + pool.length + ". Aggiungi o approva qualche profilo con foto dalla pagina Impara!") : [
+      h("div",{class:"role",style:"text-align:left;margin-top:12px"},"Numero di domande"),
+      h("div",{class:"choicerow"}, KINDS.map(k => {
+        const disabled = k.id!=="all" && +k.id > pool.length;
+        return h("button",{class:"btn","aria-pressed":game.kind===k.id,disabled,onclick:()=>{game.kind=k.id;render();}},
+          k.id==="all" ? "Completo (" + pool.length + ")" : k.label);
+      })),
+      h("div",{class:"role",style:"margin-top:10px"}, game.kind==="all" ? "Tutte le " + pool.length + " persone, in ordine casuale." : nq + " persone scelte a caso."),
+      h("button",{class:"btn primary",style:"margin-top:14px;width:100%",onclick:()=>{game.start();render();}},"Inizia"),
+      h("div",{class:"role",style:"margin-top:8px"},"Per la classifica si confrontano partite con lo stesso tipo e lo stesso numero di domande.")]));
 }
 
 function endView(wrap){
@@ -697,49 +901,19 @@ function gameView(){
 
   } else { // hard: compila tutta la scheda
     const name = h("input",{type:"text",maxlength:"80",autocomplete:"off","aria-label":"Nome e cognome"});
+    const useNick = !!(state.company && state.company.useNick);
     const nick = h("input",{type:"text",maxlength:"40",autocomplete:"off","aria-label":"Soprannome"});
-    const roleBoxes = ROLES.map(() => h("input",{type:"checkbox"}));
-    const comBoxes = COMITATO_ROLES.map(() => h("input",{type:"checkbox"}));
-    const comPanel = h("div",{class:"companel",style:"display:none"}, h("div",{class:"role",style:"margin-bottom:4px"},"Carica nel comitato"),
-      h("div",{class:"checks col"}, COMITATO_ROLES.map((c,i)=>h("label",{}, comBoxes[i], c))));
-    const comIdx = ROLES.indexOf("Comitato");
-    roleBoxes[comIdx].addEventListener("change", () => { comPanel.style.display = roleBoxes[comIdx].checked ? "block" : "none"; });
-    const gearBoxes = GEARS.map(() => h("input",{type:"checkbox"}));
+    const fs = fieldsOf();
+    const inputs = fs.map(f => fieldInput(f));
     const check = h("button",{class:"btn primary"},"Verifica la scheda");
 
     const submit = () => {
       if (game.answered) return;
       const rows = [];
-      // nome
-      const sn = judgeText(name.value, t.name);
-      rows.push({label:"Nome e cognome", yours:name.value.trim()||"—", right:t.name, pts:sn, max:1});
-      // soprannome (solo se la persona ne ha uno)
-      if (t.nick) rows.push({label:"Soprannome", yours:nick.value.trim()||"—", right:"«"+t.nick+"»", pts:judgeText(nick.value, t.nick), max:1});
-      // ruolo: Monitore / Aiutomonitore = 1 punto, tutto o niente
-      const want = roleSet(t);
-      const MON = ["Aiutomonitore","Monitore"];
-      const wantMon = MON.filter(r => want.roles.includes(r));
-      const userMon = MON.filter(r => roleBoxes[ROLES.indexOf(r)].checked);
-      if (wantMon.length || userMon.length){
-        const same = wantMon.length === userMon.length && wantMon.every(r => userMon.includes(r));
-        rows.push({label:"Monitore / Aiuto", yours:userMon.join(", ")||"—", right:wantMon.join(", ")||"nessuno", pts:same ? 1 : 0, max:1});
-      }
-      // comitato: 0,5 per aver spuntato «Comitato» + 0,5 per la carica giusta
-      const wantCom = want.roles.includes("Comitato"), userCom = roleBoxes[comIdx].checked;
-      if (wantCom || userCom){
-        rows.push({label:"Comitato", yours:userCom?"Sì":"No", right:wantCom?"Sì":"No", pts:(wantCom && userCom) ? 0.5 : 0, max:0.5});
-      }
-      if (wantCom && want.com.length){
-        const mine = userCom ? COMITATO_ROLES.filter((c,i)=>comBoxes[i].checked) : [];
-        const okCar = mine.length === want.com.length && want.com.every(c => mine.includes(c));
-        rows.push({label:"Carica", yours:mine.join(", ")||"—", right:want.com.join(", "), pts:okCar ? 0.5 : 0, max:0.5});
-      }
-      // attrezzo (solo se indicato)
-      if (arr(t.gear).length){
-        let errors = 0; gearBoxes.forEach((b,i) => { if (b.checked !== arr(t.gear).includes(GEARS[i])) errors++; });
-        rows.push({label:"Attrezzo", yours:GEARS.filter((x,i)=>gearBoxes[i].checked).join(", ")||"—", right:arr(t.gear).join(", "), pts:gearBoxes.some(b=>b.checked) ? Math.max(0, 1 - 0.5*errors) : 0, max:1});
-      }
-      [name, nick, ...roleBoxes, ...comBoxes, ...gearBoxes, check].forEach(el => el.disabled = true);
+      rows.push({label:"Nome e cognome", yours:name.value.trim()||"—", right:t.name, pts:judgeText(name.value, t.name), max:1});
+      if (useNick && t.nick) rows.push({label:"Soprannome", yours:nick.value.trim()||"—", right:"«"+t.nick+"»", pts:judgeText(nick.value, t.nick), max:1});
+      fs.forEach((f,i) => rows.push(...fieldRows(f, t, inputs[i])));
+      [name, nick, ...inputs.flatMap(x => x.controls), check].forEach(el => el.disabled = true);
       const pts = rows.reduce((a,x)=>a+x.pts,0), max = rows.reduce((a,x)=>a+x.max,0);
       const table = h("div",{class:"review"}, rows.map(x => {
         const c = mark(x.pts, x.max);
@@ -751,17 +925,17 @@ function gameView(){
       finish(pts, max,
         h("strong",{class:mark(pts,max)==="ok"?"okt":""}, "Questa scheda: " + fmt(pts) + " / " + fmt(max)),
         table,
-        h("div",{class:"role",style:"margin-top:6px"},"Nome e soprannome: 1 punto (0,5 se quasi giusto) · Monitore/Aiuto: 1 · Comitato: 0,5 + 0,5 per la carica · Attrezzo: 1 (0,5 con un solo errore)"));
+        h("div",{class:"role",style:"margin-top:6px"},"Nome, soprannome e testi: 1 punto (0,5 se quasi giusto) · Scelte: 1 punto se esatte · Scelte con dettagli: 0,5 + 0,5 per il dettaglio"));
     };
     check.onclick = submit;
     name.addEventListener("keydown", e => { if (e.key==="Enter") submit(); });
     nick.addEventListener("keydown", e => { if (e.key==="Enter") submit(); });
+    inputs.forEach(x => { if (x.main) x.main.addEventListener("keydown", e => { if (e.key==="Enter") submit(); }); });
     body = [photoEl(t), h("h2",{},"Compila la scheda di questa persona"),
       h("div",{class:"hardform"},
         h("div",{class:"field"}, h("label",{},"Nome e cognome"), name),
-        h("div",{class:"field"}, h("label",{},"Soprannome (se ne ha uno)"), nick),
-        h("div",{class:"field"}, h("label",{},"Ruolo"), h("div",{class:"checks"}, ROLES.map((x,i)=>h("label",{}, roleBoxes[i], x))), comPanel),
-        h("div",{class:"field"}, h("label",{},"Attrezzo"), h("div",{class:"checks"}, GEARS.map((x,i)=>h("label",{}, gearBoxes[i], x)))),
+        useNick ? h("div",{class:"field"}, h("label",{},"Soprannome (se ne ha uno)"), nick) : null,
+        fs.map((f,i) => h("div",{class:"field"}, h("label",{}, f.label), inputs[i].el)),
         check)];
   }
   wrap.append(

@@ -1,11 +1,94 @@
--- Chi è chi: schema del database (Supabase / PostgreSQL)
--- Da incollare nel "SQL Editor" di Supabase ed eseguire una volta sola.
+-- Club Quiz: schema completo del database (Supabase / PostgreSQL)
+-- Per una NUOVA installazione: incolla tutto nel "SQL Editor" di Supabase ed esegui una volta sola.
+-- (Se hai già una versione precedente, usa invece supabase/migrazione-campi.sql.)
+
+-- ───────────── Validazione della scheda (definita dall'admin) ─────────────
+create or replace function public.valid_fields(f jsonb) returns boolean
+language plpgsql immutable as $$
+declare fld jsonb; opt jsonb; sub jsonb; ids text[] := '{}'; v text;
+begin
+  if jsonb_typeof(f) is distinct from 'array' or jsonb_array_length(f) > 8 then return false; end if;
+  for fld in select value from jsonb_array_elements(f) loop
+    if jsonb_typeof(fld) is distinct from 'object' then return false; end if;
+    v := fld->>'id';
+    if v is null or v !~ '^[a-z0-9_]{1,24}$' or v = any(ids) then return false; end if;
+    ids := ids || v;
+    if char_length(coalesce(fld->>'label','')) not between 1 and 40 then return false; end if;
+    if coalesce(fld->>'type','') not in ('text','single','multi') then return false; end if;
+    if fld->>'type' <> 'text' then
+      if jsonb_typeof(fld->'options') is distinct from 'array' or jsonb_array_length(fld->'options') not between 1 and 30 then return false; end if;
+      for opt in select value from jsonb_array_elements(fld->'options') loop
+        if jsonb_typeof(opt) is distinct from 'object' then return false; end if;
+        v := opt->>'id';
+        if v is null or v !~ '^[a-z0-9_]{1,24}$' or v = any(ids) then return false; end if;
+        ids := ids || v;
+        if char_length(coalesce(opt->>'label','')) not between 1 and 60 then return false; end if;
+        if opt->'sub' is not null then
+          if jsonb_typeof(opt->'sub') is distinct from 'array' or jsonb_array_length(opt->'sub') > 30 then return false; end if;
+          for sub in select value from jsonb_array_elements(opt->'sub') loop
+            if jsonb_typeof(sub) is distinct from 'object' then return false; end if;
+            v := sub->>'id';
+            if v is null or v !~ '^[a-z0-9_]{1,24}$' or v = any(ids) then return false; end if;
+            ids := ids || v;
+            if char_length(coalesce(sub->>'label','')) not between 1 and 60 then return false; end if;
+          end loop;
+        end if;
+      end loop;
+    end if;
+  end loop;
+  return true;
+end $$;
+
+create or replace function public.valid_person_data(f jsonb, d jsonb) returns boolean
+language plpgsql immutable as $$
+declare k text; v jsonb; fld jsonb; opt jsonb; sub jsonb; el jsonb; s text;
+        ok_top text[]; ok_sub text[]; parent_of jsonb; vals text[]; tops int;
+begin
+  if jsonb_typeof(d) is distinct from 'object' or char_length(d::text) > 4000 then return false; end if;
+  for k, v in select key, value from jsonb_each(d) loop
+    fld := null;
+    select x.value into fld from jsonb_array_elements(f) x where x.value->>'id' = k limit 1;
+    if fld is null then return false; end if;
+    if fld->>'type' = 'text' then
+      if jsonb_typeof(v) is distinct from 'string' or char_length(v #>> '{}') > 100 then return false; end if;
+    else
+      if jsonb_typeof(v) is distinct from 'array' or jsonb_array_length(v) > 40 then return false; end if;
+      ok_top := '{}'; ok_sub := '{}'; parent_of := '{}'::jsonb;
+      for opt in select value from jsonb_array_elements(fld->'options') loop
+        ok_top := ok_top || (opt->>'id');
+        if opt->'sub' is not null then
+          for sub in select value from jsonb_array_elements(opt->'sub') loop
+            ok_sub := ok_sub || (sub->>'id');
+            parent_of := parent_of || jsonb_build_object(sub->>'id', opt->>'id');
+          end loop;
+        end if;
+      end loop;
+      vals := '{}';
+      for el in select value from jsonb_array_elements(v) loop
+        if jsonb_typeof(el) is distinct from 'string' then return false; end if;
+        vals := vals || (el #>> '{}');
+      end loop;
+      tops := 0;
+      foreach s in array vals loop
+        if s = any(ok_top) then tops := tops + 1;
+        elsif s = any(ok_sub) then
+          if not ((parent_of->>s) = any(vals)) then return false; end if;
+        else return false; end if;
+      end loop;
+      if fld->>'type' = 'single' and tops > 1 then return false; end if;
+    end if;
+  end loop;
+  return true;
+end $$;
+
 
 -- ───────────── Tabelle ─────────────
 create table if not exists public.clubs (
   id         uuid primary key default gen_random_uuid(),
   slug       text not null unique check (slug ~ '^[a-z0-9][a-z0-9-]{2,60}$'),
   name       text not null check (char_length(name) between 2 and 60),
+  fields     jsonb not null default '[]'::jsonb constraint clubs_fields_valid check (public.valid_fields(fields)),
+  use_nick   boolean not null default true,
   owner_id   uuid not null default auth.uid() references auth.users(id) on delete cascade,
   created_at timestamptz not null default now()
 );
@@ -15,9 +98,7 @@ create table if not exists public.people (
   club_id    uuid not null references public.clubs(id) on delete cascade,
   name       text not null check (char_length(name) between 1 and 80),
   nick       text not null default '' check (char_length(nick) <= 40),
-  roles      text[] not null default '{}',
-  comitato   text[] not null default '{}',
-  gear       text[] not null default '{}',
+  data       jsonb not null default '{}'::jsonb constraint people_data_size check (char_length(data::text) <= 4000),
   photo      text not null default '' check (char_length(photo) <= 150000),
   status     text not null default 'pending' check (status in ('pending','approved')),
   created_at timestamptz not null default now(),
@@ -28,11 +109,8 @@ create index if not exists people_club_status_idx on public.people (club_id, sta
 -- ───────────── Sicurezza (Row Level Security) ─────────────
 alter table public.clubs  enable row level security;
 alter table public.people enable row level security;
-
--- I visitatori anonimi non possono leggere né scrivere direttamente nelle tabelle:
 revoke all on public.clubs, public.people from anon;
 
--- L'amministratore (proprietario della directory) gestisce tutto ciò che è suo.
 drop policy if exists clubs_owner on public.clubs;
 create policy clubs_owner on public.clubs
   for all to authenticated
@@ -44,68 +122,51 @@ create policy people_owner on public.people
   using (exists (select 1 from public.clubs c where c.id = people.club_id and c.owner_id = auth.uid()))
   with check (exists (select 1 from public.clubs c where c.id = people.club_id and c.owner_id = auth.uid()));
 
--- ───────────── Funzioni pubbliche (usate dal link condiviso, senza account) ─────────────
+grant select, insert, update, delete on public.clubs, public.people to authenticated;
 
--- Nome della directory a partire dal link.
-create or replace function public.club_by_slug(p_slug text)
-returns table (id uuid, name text)
+-- ───────────── Funzioni pubbliche (usate dal link condiviso, senza account) ─────────────
+create or replace function public.club_info(p_slug text)
+returns table (id uuid, name text, fields jsonb, use_nick boolean)
 language sql stable security definer set search_path = public as $$
-  select c.id, c.name from public.clubs c where c.slug = p_slug;
+  select c.id, c.name, c.fields, c.use_nick from public.clubs c where c.slug = p_slug;
 $$;
 
--- Solo le persone APPROVATE.
-create or replace function public.club_people(p_slug text)
-returns table (id uuid, name text, nick text, roles text[], comitato text[], gear text[], photo text)
+create or replace function public.club_members(p_slug text)
+returns table (id uuid, name text, nick text, data jsonb, photo text)
 language sql stable security definer set search_path = public as $$
-  select p.id, p.name, p.nick, p.roles, p.comitato, p.gear, p.photo
+  select p.id, p.name, p.nick, p.data, p.photo
   from public.people p join public.clubs c on c.id = p.club_id
   where c.slug = p_slug and p.status = 'approved'
   order by p.name;
 $$;
 
--- Proposta di una nuova persona: finisce sempre "in attesa" fino all'approvazione.
-create or replace function public.submit_person(
-  p_slug text, p_name text, p_nick text, p_roles text[], p_comitato text[], p_gear text[], p_photo text
-) returns void
+create or replace function public.submit_member(p_slug text, p_name text, p_nick text, p_data jsonb, p_photo text)
+returns void
 language plpgsql security definer set search_path = public as $$
-declare
-  v_club uuid;
-  v_roles    constant text[] := array['Aiutomonitore','Monitore','Comitato'];
-  v_comitato constant text[] := array['Presidente','Vice Presidente','Team Coach','Segretaria','Cassiere',
-                                      'Responsabile Eventi','Responsabile Sito/Area soci','Responsabile PR',
-                                      'Responsabile attività invernali','Membro di comitato'];
-  v_gear     constant text[] := array['Sci','Snowboard'];
+declare v_club uuid; v_fields jsonb; v_nick boolean;
 begin
-  select id into v_club from public.clubs where slug = p_slug;
+  select id, fields, use_nick into v_club, v_fields, v_nick from public.clubs where slug = p_slug;
   if v_club is null then raise exception 'club_not_found'; end if;
-
   if p_name is null or char_length(btrim(p_name)) not between 1 and 80 then raise exception 'invalid_name'; end if;
   if char_length(coalesce(p_nick,'')) > 40 then raise exception 'invalid_nick'; end if;
-  if not (coalesce(p_roles,'{}')    <@ v_roles)    then raise exception 'invalid_roles'; end if;
-  if not (coalesce(p_comitato,'{}') <@ v_comitato) then raise exception 'invalid_comitato'; end if;
-  if not (coalesce(p_gear,'{}')     <@ v_gear)     then raise exception 'invalid_gear'; end if;
+  if not public.valid_person_data(v_fields, coalesce(p_data, '{}'::jsonb)) then raise exception 'invalid_data'; end if;
   if coalesce(p_photo,'') <> '' and (left(p_photo, 23) <> 'data:image/jpeg;base64,' or char_length(p_photo) > 150000)
     then raise exception 'invalid_photo'; end if;
-
-  -- Freno anti-spam: massimo 200 proposte in attesa per directory.
   if (select count(*) from public.people where club_id = v_club and status = 'pending') >= 200
     then raise exception 'too_many_pending'; end if;
-
-  insert into public.people (club_id, name, nick, roles, comitato, gear, photo, status)
-  values (v_club, btrim(p_name), btrim(coalesce(p_nick,'')), coalesce(p_roles,'{}'), coalesce(p_comitato,'{}'),
-          coalesce(p_gear,'{}'), coalesce(p_photo,''), 'pending');
+  insert into public.people (club_id, name, nick, data, photo, status)
+  values (v_club, btrim(p_name), case when v_nick then btrim(coalesce(p_nick,'')) else '' end,
+          coalesce(p_data, '{}'::jsonb), coalesce(p_photo,''), 'pending');
 end;
 $$;
 
-revoke all on function public.club_by_slug(text), public.club_people(text),
-  public.submit_person(text,text,text,text[],text[],text[],text) from public;
-grant execute on function public.club_by_slug(text), public.club_people(text),
-  public.submit_person(text,text,text,text[],text[],text[],text) to anon, authenticated;
+revoke all on function public.club_info(text), public.club_members(text),
+  public.submit_member(text,text,text,jsonb,text) from public;
+grant execute on function public.club_info(text), public.club_members(text),
+  public.submit_member(text,text,text,jsonb,text) to anon, authenticated;
 
--- Permessi per l'admin (utente autenticato) sulle tabelle
-grant select, insert, update, delete on public.clubs, public.people to authenticated;
 
--- Classifica (aggiunta a schema.sql)
+-- ───────────── Classifica ─────────────
 create table if not exists public.scores (
   id         uuid primary key default gen_random_uuid(),
   club_id    uuid not null references public.clubs(id) on delete cascade,
@@ -118,7 +179,7 @@ create table if not exists public.scores (
   seconds    int  not null default 0 check (seconds between 0 and 86400),
   created_at timestamptz not null default now(),
   check (score <= max),
-  check (max <= n * 7),
+  check (max <= n * 30),
   check (kind = 'all' or n = kind::int)
 );
 create index if not exists scores_club_idx on public.scores (club_id, mode, kind);
