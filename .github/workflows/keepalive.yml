@@ -28,3 +28,10 @@ jobs:
           URL=$(grep -o 'https://[a-z0-9]*\.supabase\.co' config.js | head -1)
           KEY=$(grep -o 'sb_publishable_[A-Za-z0-9_-]*' config.js | head -1)
           curl -sS "$URL/auth/v1/settings" -H "apikey: $KEY" | python3 -c 'import sys,json; d=json.load(sys.stdin); print("disable_signup =", d.get("disable_signup")); print("mailer_autoconfirm =", d.get("mailer_autoconfirm"))'
+      - name: Verifica che la libreria Supabase corrisponda al codice d'integrità
+        run: |
+          SRC=$(grep -o 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@[^"]*' index.html | head -1)
+          WANT=$(grep -o 'integrity="sha384-[^"]*"' index.html | head -1 | sed 's/integrity="//;s/"$//')
+          GOT="sha384-$(curl -sSL "$SRC" | openssl dgst -sha384 -binary | openssl base64 -A)"
+          echo "atteso: $WANT"; echo "ottenuto: $GOT"
+          test "$WANT" = "$GOT"
