@@ -602,6 +602,42 @@ function showPrivacy(){
   ov.addEventListener("mousedown", e => { if (e.target===ov) close(); });
   modal.append(ov);
 }
+// Backup della directory in un file SQL, da rieseguire nello SQL Editor di Supabase dopo schema.sql
+async function backupSql(){
+  const cid = state.company.id;
+  const [c, p, sc] = await Promise.all([
+    sb.from("clubs").select("id,slug,name,fields,use_nick,created_at").eq("id", cid).maybeSingle(),
+    sb.from("people").select("id,name,nick,data,photo,status,created_at,updated_at").eq("club_id", cid).order("name"),
+    sb.from("scores").select("id,player,mode,kind,n,score,max,seconds,created_at").eq("club_id", cid)]);
+  for (const r of [c,p,sc]) if (r.error) throw r.error;
+  const q = v => v == null ? "null" : "'" + String(v).replace(/'/g, "''") + "'";
+  const j = v => q(JSON.stringify(v)) + "::jsonb";
+  const email = (state.session && state.session.user && state.session.user.email) || "";
+  const club = c.data, L = [];
+  L.push("-- Club Quiz · backup della directory «" + club.name + "» · " + new Date().toLocaleString("it-CH"));
+  L.push("-- " + p.data.length + " persone, " + sc.data.length + " punteggi.");
+  L.push("-- RIPRISTINO: 1) esegui supabase/schema.sql  2) crea l'utente admin " + email + " (Authentication → Users → Add user)");
+  L.push("--             3) esegui questo file nello SQL Editor. Le righe già presenti vengono saltate.");
+  L.push("begin;");
+  L.push("insert into public.clubs (id, slug, name, fields, use_nick, owner_id, created_at) values (" + [q(club.id), q(club.slug), q(club.name), j(club.fields), club.use_nick ? "true" : "false",
+    "(select id from auth.users where lower(email) = lower(" + q(email) + "))", q(club.created_at)].join(", ") + ") on conflict (id) do nothing;");
+  for (const r of p.data) L.push("insert into public.people (id, club_id, name, nick, data, photo, status, created_at, updated_at) values (" +
+    [q(r.id), q(club.id), q(r.name), q(r.nick), j(r.data), q(r.photo), q(r.status), q(r.created_at), q(r.updated_at)].join(", ") + ") on conflict (id) do nothing;");
+  for (const r of sc.data) L.push("insert into public.scores (id, club_id, player, mode, kind, n, score, max, seconds, created_at) values (" +
+    [q(r.id), q(club.id), q(r.player), q(r.mode), q(r.kind), r.n, r.score, r.max, r.seconds, q(r.created_at)].join(", ") + ") on conflict (id) do nothing;");
+  L.push("commit;");
+  return L.join("\n") + "\n";
+}
+async function downloadBackup(btn){
+  btn.disabled = true; const old = btn.textContent; btn.textContent = "Preparo…";
+  try {
+    const sql = await backupSql();
+    const a = h("a",{href:URL.createObjectURL(new Blob([sql],{type:"application/sql"})), download:"backup-" + state.slug + "-" + new Date().toISOString().slice(0,10) + ".sql"});
+    document.body.append(a); a.click(); a.remove();
+    btn.textContent = old;
+  } catch(e){ btn.textContent = "Backup non riuscito"; }
+  btn.disabled = false;
+}
 async function changeLink(){
   const slug = slugify(state.company.name);
   const { error } = await sb.from("clubs").update({ slug }).eq("id", state.company.id);
@@ -677,7 +713,8 @@ function dirView(){
   const grid = h("div",{class:"grid"});
   wrap.append(h("div",{class:"bar"}, search,
     h("button",{class:"btn primary",onclick:()=>openForm(null)}, "Aggiungi una persona"),
-    admin ? h("button",{class:"btn",onclick:openStructure}, "Modifica la scheda") : null, count), grid);
+    admin ? h("button",{class:"btn",onclick:openStructure}, "Modifica la scheda") : null,
+    admin ? h("button",{class:"btn",onclick:e=>downloadBackup(e.currentTarget)}, "Scarica backup") : null, count), grid);
 
   function draw(){
     const q = state.q.trim().toLowerCase();
