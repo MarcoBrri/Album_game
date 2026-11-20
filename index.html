@@ -628,18 +628,24 @@ function gameView(){
       rows.push({label:"Nome e cognome", yours:name.value.trim()||"—", right:t.name, pts:sn, max:1});
       // soprannome (solo se la persona ne ha uno)
       if (t.nick) rows.push({label:"Soprannome", yours:nick.value.trim()||"—", right:"«"+t.nick+"»", pts:judgeText(nick.value, t.nick), max:1});
-      // ruolo (solo se indicato)
+      // ruolo: Monitore / Aiutomonitore = 1 punto, tutto o niente
       const want = roleSet(t);
-      if (want.roles.length){
-        let errors = 0;
-        roleBoxes.forEach((b,i) => { if (b.checked !== want.roles.includes(ROLES[i])) errors++; });
-        rows.push({label:"Ruolo", yours:ROLES.filter((x,i)=>roleBoxes[i].checked).join(", ")||"—", right:want.roles.join(", "), pts:roleBoxes.some(b=>b.checked) ? Math.max(0, 1 - 0.5*errors) : 0, max:1});
+      const MON = ["Aiutomonitore","Monitore"];
+      const wantMon = MON.filter(r => want.roles.includes(r));
+      const userMon = MON.filter(r => roleBoxes[ROLES.indexOf(r)].checked);
+      if (wantMon.length || userMon.length){
+        const same = wantMon.length === userMon.length && wantMon.every(r => userMon.includes(r));
+        rows.push({label:"Monitore / Aiuto", yours:userMon.join(", ")||"—", right:wantMon.join(", ")||"nessuno", pts:same ? 1 : 0, max:1});
       }
-      // carica nel comitato (solo se indicata)
-      if (want.com.length){
-        const mine = COMITATO_ROLES.filter((c,i)=>roleBoxes[comIdx].checked && comBoxes[i].checked);
-        const errors = COMITATO_ROLES.filter(c => mine.includes(c) !== want.com.includes(c)).length;
-        rows.push({label:"Carica in comitato", yours:mine.join(", ")||"—", right:want.com.join(", "), pts:mine.length ? Math.max(0, 1 - 0.5*errors) : 0, max:1});
+      // comitato: 0,5 per aver spuntato «Comitato» + 0,5 per la carica giusta
+      const wantCom = want.roles.includes("Comitato"), userCom = roleBoxes[comIdx].checked;
+      if (wantCom || userCom){
+        rows.push({label:"Comitato", yours:userCom?"Sì":"No", right:wantCom?"Sì":"No", pts:(wantCom && userCom) ? 0.5 : 0, max:0.5});
+      }
+      if (wantCom && want.com.length){
+        const mine = userCom ? COMITATO_ROLES.filter((c,i)=>comBoxes[i].checked) : [];
+        const okCar = mine.length === want.com.length && want.com.every(c => mine.includes(c));
+        rows.push({label:"Carica", yours:mine.join(", ")||"—", right:want.com.join(", "), pts:okCar ? 0.5 : 0, max:0.5});
       }
       // attrezzo (solo se indicato)
       if (arr(t.gear).length){
@@ -653,12 +659,12 @@ function gameView(){
         return h("div",{class:"rv " + c},
           h("div",{class:"rl"}, x.label),
           h("div",{class:"rt"}, c==="ok" ? x.right : [h("div",{}, "Tu: ", x.yours), h("div",{class:"ans"}, "Giusto: ", x.right)]),
-          h("div",{class:"rp"}, markIcon(c) + " " + fmt(x.pts) + "/" + x.max));
+          h("div",{class:"rp"}, markIcon(c) + " " + fmt(x.pts) + "/" + fmt(x.max)));
       }));
       finish(pts, max,
-        h("strong",{class:mark(pts,max)==="ok"?"okt":""}, "Questa scheda: " + fmt(pts) + " / " + max),
+        h("strong",{class:mark(pts,max)==="ok"?"okt":""}, "Questa scheda: " + fmt(pts) + " / " + fmt(max)),
         table,
-        h("div",{class:"role",style:"margin-top:6px"},"✓ giusto = 1 punto · ≈ quasi giusto = 0,5 · ✗ sbagliato = 0"));
+        h("div",{class:"role",style:"margin-top:6px"},"Nome e soprannome: 1 punto (0,5 se quasi giusto) · Monitore/Aiuto: 1 · Comitato: 0,5 + 0,5 per la carica · Attrezzo: 1 (0,5 con un solo errore)"));
     };
     check.onclick = submit;
     name.addEventListener("keydown", e => { if (e.key==="Enter") submit(); });
