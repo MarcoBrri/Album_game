@@ -563,7 +563,7 @@ function shareBox(){
     h("strong",{},"Link da condividere con i colleghi"),
     h("div",{class:"linkrow"}, inp, cp),
     h("div",{class:"role"}, state.admin ? "Chiunque apre questo link può proporre nuove persone: compaiono dopo la tua approvazione." : "Chiunque apre questo link può proporre nuove persone: compaiono dopo l'approvazione dell'amministratore."),
-    h("a",{href:"#",class:"minelink",style:"margin-top:8px",onclick:e=>{ if (game.inProgress()){ e.preventDefault(); confirmLeave(()=>{ location.hash=""; }); } }},"← Home"));
+    state.admin ? h("a",{href:"#",class:"minelink",style:"margin-top:8px",onclick:e=>{ if (game.inProgress()){ e.preventDefault(); confirmLeave(()=>{ location.hash=""; }); } }},"← Le tue directory") : null);
 }
 
 const isApproved = p => p.approved !== false;
