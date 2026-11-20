@@ -116,8 +116,8 @@ nav[hidden]{display:none}
   <h1><span id="title">Chi è chi</span> <small id="sub"></small></h1>
   <div id="auth" class="authbar"></div>
   <nav role="tablist" id="nav" hidden>
-    <button role="tab" id="tab-dir" aria-selected="true">Directory</button>
-    <button role="tab" id="tab-game" aria-selected="false">Indovina chi</button>
+    <button role="tab" id="tab-dir" aria-selected="true">Impara</button>
+    <button role="tab" id="tab-game" aria-selected="false">Gioca</button>
     <button role="tab" id="tab-board" aria-selected="false">Classifica</button>
   </nav>
 </header>
@@ -137,7 +137,7 @@ function h(tag, attrs, ...kids){
     if (k === "class") el.className = v;
     else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
     else if (k === "text") el.textContent = v;
-    else el.setAttribute(k, v === true ? "" : v);
+    else el.setAttribute(k, v === true ? (k.startsWith("aria-") ? "true" : "") : v);
   }
   for (const c of kids.flat(Infinity)) if (c != null && c !== false) el.append(c.nodeType ? c : document.createTextNode(c));
   return el;
@@ -306,7 +306,7 @@ function render(){
   const inCo = !!(state.slug && state.company);
   document.getElementById("nav").hidden = !inCo;
   document.getElementById("title").textContent = inCo ? state.company.name : "Chi è chi";
-  document.getElementById("sub").textContent = inCo ? (state.admin ? "Vista amministratore" : "Directory e gioco per conoscerci meglio") : "La directory con foto e il gioco per imparare i nomi";
+  document.getElementById("sub").textContent = inCo ? (state.admin ? "Vista amministratore" : "Album e gioco per conoscerci meglio") : "La directory con foto e il gioco per imparare i nomi";
   document.title = inCo ? state.company.name + " – Chi è chi" : "Chi è chi";
   document.getElementById("tab-dir").setAttribute("aria-selected", state.view==="dir");
   document.getElementById("tab-game").setAttribute("aria-selected", state.view==="game");
@@ -606,7 +606,7 @@ function setupView(wrap){
   const pool = game.pool();
   const cfg = MODES.find(m=>m.id===game.mode);
   if (pool.length < cfg.min){
-    wrap.append(h("div",{class:"empty"}, "Servono almeno " + cfg.min + " persone con foto per giocare. Ora ce ne sono " + pool.length + ". Aggiungi o approva qualche profilo con foto dalla Directory!"));
+    wrap.append(h("div",{class:"empty"}, "Servono almeno " + cfg.min + " persone con foto per giocare. Ora ce ne sono " + pool.length + ". Aggiungi o approva qualche profilo con foto dalla pagina Impara!"));
     return;
   }
   if (game.kind !== "all" && +game.kind > pool.length) game.kind = "all";
