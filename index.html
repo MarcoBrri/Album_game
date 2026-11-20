@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chi è chi</title>
+<style>
+:root{
+  --bg:#f6f5f1;--surface:#fff;--ink:#1d1d1b;--muted:#6b6a64;--line:#e3e1d9;
+  --accent:#1f6f5c;--accent-ink:#fff;--accent-soft:#e3f1ec;--ok:#2e7d32;--bad:#c62828;--shadow:0 1px 3px rgba(0,0,0,.08);
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#171715;--surface:#222220;--ink:#f0eee7;--muted:#a19f95;--line:#363631;
+  --accent:#5cc4a8;--accent-ink:#0f1f1a;--accent-soft:#1f3a32;--ok:#7bd17f;--bad:#ff8a80;--shadow:none}
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:18px 20px 8px;max-width:1100px;margin:0 auto}
+h1{font-size:22px;margin:0;letter-spacing:-.01em}
+h1 small{display:block;font-size:13px;font-weight:400;color:var(--muted);letter-spacing:0}
+nav{display:flex;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:3px}
+nav button{border:0;background:none;color:var(--muted);font:inherit;font-size:14px;padding:7px 16px;border-radius:999px;cursor:pointer}
+nav button[aria-selected=true]{background:var(--accent);color:var(--accent-ink)}
+main{max-width:1100px;margin:0 auto;padding:8px 20px 60px}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:10px 0 18px}
+input[type=text],input[type=search],select{font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);min-width:0}
+input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.bar input[type=search]{flex:1 1 220px}
+.btn{font:inherit;font-size:15px;padding:10px 16px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.danger{color:var(--bad)}
+.btn[disabled]{opacity:.5;cursor:default}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow);display:flex;flex-direction:column;position:relative}
+.photo{aspect-ratio:1/1;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:42px;font-weight:600;width:100%}
+.photo img{width:100%;height:100%;object-fit:cover;display:block}
+.info{padding:10px 12px 12px}
+.name{font-weight:600;line-height:1.25}
+.role{font-size:14px;color:var(--muted)}
+.chips{margin-top:6px;display:flex;flex-wrap:wrap;gap:4px}.nick{font-size:14px;font-style:italic;color:var(--accent)}
+.team{display:inline-block;font-size:12px;background:var(--accent-soft);color:var(--accent);padding:2px 8px;border-radius:999px}
+.pending{background:var(--accent-soft);border:1px solid var(--accent);border-radius:14px;padding:14px;margin-bottom:18px}.pending h3{margin:0 0 4px;font-size:16px}
+.cardact{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 12px}.cardact .btn{font-size:13px;padding:6px 10px;flex:1 1 auto}
+.edit{position:absolute;top:8px;right:8px;font-size:12px;padding:4px 9px;border-radius:999px;border:0;background:rgba(0,0,0,.6);color:#fff;cursor:pointer}
+.me{position:absolute;top:8px;left:8px;font-size:11px;padding:2px 8px;border-radius:999px;background:var(--accent);color:var(--accent-ink)}
+.empty,.note{color:var(--muted);text-align:center;padding:40px 10px}
+.note.box{background:var(--surface);border:1px dashed var(--line);border-radius:12px;padding:14px;text-align:left;margin-bottom:14px;font-size:14px}
+.count{color:var(--muted);font-size:14px;margin-left:auto}
+.home{max-width:560px;margin:4vh auto 0}
+.hero h2{font-size:28px;line-height:1.2;margin:0 0 10px;letter-spacing:-.01em}
+.hero p{color:var(--muted);margin:0 0 20px}
+.create{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:10px}
+.create label{font-weight:600}
+.create input{width:100%}
+.mine{margin-top:26px}.mine h3{font-size:14px;color:var(--muted);font-weight:600;margin:0 0 8px}
+.minelink{display:inline-block;color:var(--accent);text-decoration:none;margin:0 14px 6px 0;font-weight:500}
+.minelink:hover{text-decoration:underline}
+.linkrow{display:flex;gap:8px;margin:8px 0}.linkrow input{flex:1}
+nav[hidden]{display:none}
+.authbar{display:flex;align-items:center;gap:8px;margin-left:auto;font-size:13px;color:var(--muted)}.btn.small{font-size:13px;padding:5px 10px}
+/* modal */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow:auto;z-index:10}
+.modal{background:var(--surface);border-radius:16px;padding:20px;width:100%;max-width:420px;margin-top:4vh}
+.modal h2{margin:0 0 14px;font-size:18px}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:13px;color:var(--muted);margin-bottom:4px}
+.field input[type=text]{width:100%}
+.pic{display:flex;gap:14px;align-items:center}
+.pic .photo{width:96px;height:96px;border-radius:50%;overflow:hidden;font-size:32px;flex:none}
+.actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
+.err{color:var(--bad);font-size:14px;min-height:20px}
+/* game */
+.game{max-width:560px;margin:0 auto}
+.modes{display:flex;gap:8px;justify-content:center;margin-bottom:14px;flex-wrap:wrap}
+.modes .btn[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.prog{display:flex;justify-content:space-between;color:var(--muted);font-size:14px;margin-bottom:8px}
+.q{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px;text-align:center}
+.q .photo{width:min(260px,70vw);height:min(260px,70vw);border-radius:16px;margin:0 auto 14px;overflow:hidden}
+.q h2{margin:0 0 14px;font-size:20px}
+.opts{display:grid;gap:8px;grid-template-columns:1fr 1fr}
+.opts.one{grid-template-columns:1fr}
+.opt small{display:block;font-size:12px;color:var(--muted);font-style:italic}
+.checks{display:flex;flex-wrap:wrap;gap:6px 14px}.checks label{display:flex;align-items:center;gap:6px;font-size:15px;color:var(--ink);margin:0}
+.checks.col{flex-direction:column;gap:6px}.companel{margin-top:8px;padding:10px 12px;border-left:3px solid var(--accent);background:var(--accent-soft);border-radius:0 10px 10px 0}
+.checks input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
+.opt{font:inherit;border:2px solid var(--line);background:var(--surface);color:var(--ink);border-radius:12px;padding:12px;cursor:pointer;min-height:48px}
+.opt.pic{padding:0;overflow:hidden;aspect-ratio:1/1}
+.opt.pic .photo{border-radius:0;font-size:28px;height:100%}
+.opt:hover:not([disabled]){border-color:var(--accent)}
+.opt.ok{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 18%,var(--surface))}
+.opt.bad{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 15%,var(--surface))}
+.fb{min-height:48px;margin-top:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
+.okt{color:var(--ok)}.badt{color:var(--bad)}
+.reveal{background:var(--accent-soft);border-radius:12px;padding:12px;width:100%;text-align:center}
+.photo.small{width:96px;height:96px;border-radius:12px;overflow:hidden;margin:0 auto 8px;font-size:30px}
+.hardform{text-align:left;max-width:360px;margin:0 auto}
+.hardform .field input[type=text]{width:100%}
+.review{width:100%;display:flex;flex-direction:column;gap:6px;text-align:left}
+.rv{display:grid;grid-template-columns:96px 1fr auto;gap:8px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);font-size:14px;align-items:start}
+.rv .rl{color:var(--muted)}.rv .ans{color:var(--ok);font-weight:600}.rv .rp{font-weight:700;white-space:nowrap}
+.rv.ok{border-color:var(--ok)}.rv.ok .rp{color:var(--ok)}.rv.near{border-color:#d9a400}.rv.near .rp{color:#b98600}.rv.bad{border-color:var(--bad)}.rv.bad .rp{color:var(--bad)}
+.final{font-size:44px;font-weight:700;margin:10px 0}
+</style>
+</head>
+<body>
+<header>
+  <h1><span id="title">Chi è chi</span> <small id="sub"></small></h1>
+  <div id="auth" class="authbar"></div>
+  <nav role="tablist" id="nav" hidden>
+    <button role="tab" id="tab-dir" aria-selected="true">Directory</button>
+    <button role="tab" id="tab-game" aria-selected="false">Indovina chi</button>
+  </nav>
+</header>
+<main id="main"></main>
+<div id="modal"></div>
+
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+"use strict";
+/* ---------- helpers ---------- */
+function h(tag, attrs, ...kids){
+  const el = document.createElement(tag);
+  for (const k in (attrs||{})){
+    const v = attrs[k];
+    if (v == null || v === false) continue;
+    if (k === "class") el.className = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (k === "text") el.textContent = v;
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of kids.flat(Infinity)) if (c != null && c !== false) el.append(c.nodeType ? c : document.createTextNode(c));
+  return el;
+}
+const initials = n => (n||"?").trim().split(/\s+/).slice(0,2).map(s=>s[0]||"").join("").toUpperCase();
+const shuffle = a => { a = a.slice(); for (let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; };
+const ROLES = ["Aiutomonitore","Monitore","Comitato"], GEARS = ["Sci","Snowboard"];
+// Cariche del comitato, come elencate nella pagina Team di sciclubpregassona.ch
+const COMITATO_ROLES = ["Presidente","Vice Presidente","Team Coach","Segretaria","Cassiere","Responsabile Eventi","Responsabile Sito/Area soci","Responsabile PR","Responsabile attività invernali","Membro di comitato"];
+const arr = v => Array.isArray(v) ? v : [];
+const cariche = p => { const l = arr(p.comitato).map(c => c==="Vice Presidente e Responsabile Formazione" ? "Vice Presidente" : c); return COMITATO_ROLES.filter(c => l.includes(c)); };
+function roleList(p){ const has = ROLES.filter(r => arr(p.roles).includes(r)); return [...cariche(p), ...has.filter(r => r==="Comitato"), ...has.filter(r => r!=="Comitato")]; }
+const roleText = p => roleList(p).join(", ");
+const fullLabel = p => (p.name||"—") + (p.nick ? " «" + p.nick + "»" : "");
+const sortName = (a,b) => (a.name||"").localeCompare(b.name||"", "it", {sensitivity:"base"});
+function photoEl(p){
+  const box = h("div", {class:"photo"});
+  if (p.photo){ const img = h("img", {src:p.photo, alt:"", loading:"lazy"}); box.append(img); }
+  else box.textContent = initials(p.name);
+  return box;
+}
+
+/* ---------- Supabase: dati, accesso admin, routing ---------- */
+const CFG = window.APP_CONFIG || {};
+const SLUG_RE = /^[a-z0-9][a-z0-9-]{2,60}$/;
+const state = { people: [], loaded:false, admin:false, shared:true, view:"dir", q:"", slug:null, company:null, notFound:false, session:null, authMsg:"", configMissing:false };
+let sb = null, routeToken = 0;
+const isAdmin = () => !!state.admin;
+const fromRow = r => ({ id:r.id, name:r.name, nick:r.nick||"", roles:r.roles||[], comitato:r.comitato||[], gear:r.gear||[], photo:r.photo||"", approved: r.status ? r.status==="approved" : true });
+
+function slugify(name){
+  const base = name.normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase()
+    .replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,30).replace(/-+$/,"") || "gruppo";
+  const abc = "abcdefghijklmnopqrstuvwxyz0123456789";
+  const rnd = Array.from(crypto.getRandomValues(new Uint8Array(5)), b => abc[b % 36]).join("");
+  return base + "-" + rnd;
+}
+
+async function loadPeople(){
+  if (!state.company) return;
+  let rows = [];
+  if (state.admin){
+    const { data, error } = await sb.from("people").select("id,name,nick,roles,comitato,gear,photo,status").eq("club_id", state.company.id).order("name");
+    if (error) throw error; rows = data || [];
+  } else {
+    const { data, error } = await sb.rpc("club_people", { p_slug: state.slug });
+    if (error) throw error; rows = (data || []).map(r => Object.assign({status:"approved"}, r));
+  }
+  state.people = rows.map(fromRow); state.loaded = true; render();
+}
+
+async function route(){
+  const my = ++routeToken;
+  const slug = location.hash.replace(/^#/, "");
+  Object.assign(state, {people:[], q:"", notFound:false, company:null, admin:false, loaded:false, view:"dir", slug:null});
+  game.reset();
+  if (state.configMissing){ render(); return; }
+  if (!slug){ state.loaded = true; render(); return; }
+  if (!SLUG_RE.test(slug)){ state.notFound = true; state.loaded = true; render(); return; }
+  state.slug = slug; render();
+  try {
+    const { data, error } = await sb.rpc("club_by_slug", { p_slug: slug });
+    if (my !== routeToken) return;
+    const club = !error && data && data[0];
+    if (!club){ state.slug = null; state.notFound = true; state.loaded = true; render(); return; }
+    state.company = { id: club.id, name: club.name };
+    if (state.session){
+      const own = await sb.from("clubs").select("id").eq("slug", slug).maybeSingle();   // le regole di sicurezza restituiscono la riga solo al proprietario
+      if (my !== routeToken) return;
+      state.admin = !!(own && own.data);
+    }
+    await loadPeople();
+  } catch(e){
+    if (my !== routeToken) return;
+    state.loaded = true; state.company = state.company || null; state.loadError = true; render();
+  }
+}
+async function initData(){
+  if (!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY || /INSERISCI/.test(CFG.SUPABASE_URL + CFG.SUPABASE_ANON_KEY)){
+    state.configMissing = true; state.loaded = true; render(); return;
+  }
+  sb = supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
+  const { data } = await sb.auth.getSession();
+  state.session = data.session;
+  sb.auth.onAuthStateChange((ev, sess) => {
+    if (ev === "INITIAL_SESSION") return;
+    state.session = sess;
+    setTimeout(route, 0);
+  });
+  route();
+}
+window.addEventListener("hashchange", route);
+document.addEventListener("visibilitychange", () => { if (!document.hidden && state.company && state.view==="dir") loadPeople().catch(()=>{}); });
+
+async function signIn(email, password){
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+}
+async function signUp(email, password){
+  const { data, error } = await sb.auth.signUp({ email, password });
+  if (error) throw error;
+  return !!data.session;   // false = serve conferma via email
+}
+async function signOut(){ await sb.auth.signOut(); }
+
+async function createCompany(name){
+  const slug = slugify(name);
+  const { error } = await sb.from("clubs").insert({ name, slug });
+  if (error) throw error;
+  location.hash = slug;
+}
+async function savePerson(id, d){
+  const row = { name:d.name, nick:d.nick||"", roles:d.roles||[], comitato:d.comitato||[], gear:d.gear||[], photo:d.photo||"", status: d.approved===false ? "pending" : "approved" };
+  if (!state.admin){
+    const { error } = await sb.rpc("submit_person", { p_slug:state.slug, p_name:row.name, p_nick:row.nick, p_roles:row.roles, p_comitato:row.comitato, p_gear:row.gear, p_photo:row.photo });
+    if (error) throw error; return;
+  }
+  row.updated_at = new Date().toISOString();
+  const res = id ? await sb.from("people").update(row).eq("id", id)
+                 : await sb.from("people").insert(Object.assign({club_id: state.company.id}, row));
+  if (res.error) throw res.error;
+  await loadPeople();
+}
+async function removePerson(id){
+  const { error } = await sb.from("people").delete().eq("id", id);
+  if (error) throw error;
+  await loadPeople();
+}
+
+/* ---------- photo: crop to square + shrink so it fits in a doc ---------- */
+async function fileToSquareJpeg(file, size=240){
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload=()=>res(i); i.onerror=()=>rej(new Error("Immagine non leggibile")); i.src=url; });
+    const s = Math.min(img.naturalWidth, img.naturalHeight);
+    const sx = (img.naturalWidth - s)/2, sy = (img.naturalHeight - s)/2;
+    const c = document.createElement("canvas"); c.width = c.height = size;
+    c.getContext("2d").drawImage(img, sx, sy, s, s, 0, 0, size, size);
+    return c.toDataURL("image/jpeg", 0.82);
+  } finally { URL.revokeObjectURL(url); }
+}
+
+/* ---------- views ---------- */
+const main = document.getElementById("main");
+function authBar(){
+  const box = document.getElementById("auth"); box.replaceChildren();
+  if (state.session){
+    const out = h("button",{class:"btn small"},"Esci");
+    out.onclick = async () => { await signOut(); };
+    box.append(h("span",{class:"who"}, state.session.user.email || ""), out);
+  }
+}
+function render(){
+  const inCo = !!(state.slug && state.company);
+  document.getElementById("nav").hidden = !inCo;
+  document.getElementById("title").textContent = inCo ? state.company.name : "Chi è chi";
+  document.getElementById("sub").textContent = inCo ? (state.admin ? "Vista amministratore" : "Directory e gioco per conoscerci meglio") : "La directory con foto e il gioco per imparare i nomi";
+  document.title = inCo ? state.company.name + " – Chi è chi" : "Chi è chi";
+  document.getElementById("tab-dir").setAttribute("aria-selected", state.view==="dir");
+  document.getElementById("tab-game").setAttribute("aria-selected", state.view==="game");
+  authBar();
+  if (state.configMissing) main.replaceChildren(h("div",{class:"note box"}, "Configurazione mancante: apri il file config.js e inserisci l'indirizzo e la chiave pubblica del tuo progetto Supabase (vedi LEGGIMI.md)."));
+  else if (!state.slug) main.replaceChildren(homeView());
+  else if (!state.company) main.replaceChildren(h("div",{class:"empty"}, state.loadError ? "Non riesco a caricare i dati. Controlla la connessione e ricarica la pagina." : "Caricamento…"));
+  else main.replaceChildren(state.view==="dir" ? dirView() : gameView());
+}
+document.getElementById("tab-dir").onclick = () => { state.view="dir"; render(); };
+document.getElementById("tab-game").onclick = () => { state.view="game"; game.reset(); render(); };
+
+function homeView(){
+  const wrap = h("div",{class:"home"});
+  if (state.notFound) wrap.append(h("div",{class:"note box"},"Questa directory non esiste o il link non è corretto. Controlla il link che ti hanno inviato."));
+  wrap.append(h("div",{class:"hero"},
+    h("h2",{},"Conosci i tuoi colleghi, giocando"),
+    h("p",{},"Una directory con foto, nome, soprannome, ruolo e attrezzo, e un gioco per imparare i volti. Ogni gruppo ha un link tutto suo: chi lo apre può proporre nuove persone, che compaiono dopo l'approvazione dell'amministratore.")));
+  if (!state.session) wrap.append(authBox()); else wrap.append(createBox(), mineBox());
+  return wrap;
+}
+function authBox(){
+  const email = h("input",{type:"text",inputmode:"email",autocomplete:"email",placeholder:"Email","aria-label":"Email"});
+  const pw = h("input",{type:"password",autocomplete:"current-password",placeholder:"Password (almeno 8 caratteri)","aria-label":"Password",style:"padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);font:inherit"});
+  const msg = h("div",{class:"err",role:"alert"});
+  const inBtn = h("button",{class:"btn primary"},"Accedi"), upBtn = h("button",{class:"btn"},"Registrati");
+  const busy = b => { inBtn.disabled = upBtn.disabled = b; };
+  const errText = e => /invalid login/i.test(e.message||"") ? "Email o password non corrette." : /already/i.test(e.message||"") ? "Esiste già un account con questa email: usa «Accedi»." : /password/i.test(e.message||"") ? "Password troppo corta o debole (almeno 8 caratteri)." : /signups? not allowed|disabled/i.test(e.message||"") ? "Le nuove registrazioni sono disattivate." : "Operazione non riuscita. Riprova.";
+  inBtn.onclick = async () => { msg.textContent=""; if(!email.value.trim()||!pw.value){ msg.textContent="Inserisci email e password."; return; } busy(true); try { await signIn(email.value.trim(), pw.value); } catch(e){ msg.textContent = errText(e); busy(false); } };
+  upBtn.onclick = async () => { msg.textContent=""; if(!email.value.trim()||pw.value.length<8){ msg.textContent="Inserisci un'email e una password di almeno 8 caratteri."; return; } busy(true);
+    try { const logged = await signUp(email.value.trim(), pw.value); if (!logged){ msg.style.color="var(--ink)"; msg.textContent="Controlla la tua email e conferma l'account, poi premi «Accedi»."; busy(false); } }
+    catch(e){ msg.textContent = errText(e); busy(false); } };
+  pw.addEventListener("keydown", e => { if (e.key==="Enter") inBtn.click(); });
+  return h("div",{class:"create"}, h("label",{},"Sei un amministratore?"),
+    h("div",{class:"role"},"Accedi, oppure registrati, per creare e gestire la directory del tuo gruppo. I visitatori non hanno bisogno di nessun account."),
+    email, pw, h("div",{style:"display:flex;gap:8px"}, inBtn, upBtn), msg);
+}
+function createBox(){
+  const name = h("input",{type:"text",maxlength:"60",placeholder:"Nome dell'azienda o dell'associazione","aria-label":"Nome",autocomplete:"off"});
+  const err = h("div",{class:"err",role:"alert"});
+  const go = h("button",{class:"btn primary"},"Crea la directory");
+  async function submit(){
+    err.textContent = ""; const n = name.value.trim();
+    if (n.length < 2){ err.textContent = "Inserisci il nome."; return; }
+    go.disabled = true; go.textContent = "Creo…";
+    try { await createCompany(n); } catch(e){ err.textContent = "Non sono riuscito a creare la directory. Riprova."; go.disabled = false; go.textContent = "Crea la directory"; }
+  }
+  go.onclick = submit; name.addEventListener("keydown", e => { if (e.key==="Enter") submit(); });
+  return h("div",{class:"create"}, h("label",{},"Crea una nuova directory"), name, go, err);
+}
+function mineBox(){
+  const box = h("div",{class:"mine"}, h("h3",{},"Le tue directory"));
+  sb.from("clubs").select("slug,name").order("created_at",{ascending:false}).then(({data}) => {
+    if (!data || !data.length){ box.append(h("div",{class:"role"},"Ancora nessuna.")); return; }
+    data.forEach(c => box.append(h("a",{href:"#"+c.slug,class:"minelink"}, c.name)));
+  });
+  return box;
+}
+function shareBox(){
+  const link = location.origin + location.pathname + "#" + state.slug;
+  const inp = h("input",{type:"text",readonly:true,value:link,"aria-label":"Link della directory"});
+  inp.addEventListener("focus", () => inp.select());
+  const cp = h("button",{class:"btn"},"Copia");
+  cp.onclick = async () => {
+    try { await navigator.clipboard.writeText(link); cp.textContent = "Copiato"; }
+    catch(e){ inp.select(); cp.textContent = "Seleziona e copia"; }
+    setTimeout(()=>{ cp.textContent = "Copia"; }, 2500);
+  };
+  return h("div",{class:"note box share"},
+    h("strong",{},"Link da condividere con i colleghi"),
+    h("div",{class:"linkrow"}, inp, cp),
+    h("div",{class:"role"}, state.admin ? "Chiunque apre questo link può proporre nuove persone: compaiono dopo la tua approvazione." : "Chiunque apre questo link può proporre nuove persone: compaiono dopo l'approvazione dell'amministratore."),
+    h("a",{href:"#",class:"minelink",style:"margin-top:8px"},"← Home"));
+}
+
+const isApproved = p => p.approved !== false;
+const stripId = p => { const o = Object.assign({}, p); delete o.id; return o; };
+function personCard(p, actions){
+  return h("div",{class:"card"},
+    photoEl(p),
+    h("div",{class:"info"},
+      h("div",{class:"name"}, p.name||"—"),
+      p.nick ? h("div",{class:"nick"}, "«" + p.nick + "»") : null,
+      h("div",{class:"chips"}, roleList(p).filter(r => !(r==="Comitato" && cariche(p).length)).map(r=>h("span",{class:"team"},r)), arr(p.gear).map(g=>h("span",{class:"team gear"},g)))),
+    actions ? h("div",{class:"cardact"}, actions) : null);
+}
+function pendingPanel(list){
+  const grid = h("div",{class:"grid"});
+  for (const p of list){
+    let armed = false;
+    const rej = h("button",{class:"btn danger"},"Rifiuta");
+    rej.onclick = async () => {
+      if (!armed){ armed = true; rej.textContent = "Conferma"; setTimeout(()=>{ armed=false; rej.textContent="Rifiuta"; }, 4000); return; }
+      try { await removePerson(p.id); } catch(e){ rej.textContent = "Errore"; }
+    };
+    const ok = h("button",{class:"btn primary"},"Approva");
+    ok.onclick = async () => { ok.disabled = true; try { await savePerson(p.id, Object.assign(stripId(p), {approved:true})); } catch(e){ ok.disabled = false; ok.textContent = "Errore"; } };
+    grid.append(personCard(p, [ok, h("button",{class:"btn",onclick:()=>openForm(p)},"Modifica"), rej]));
+  }
+  return h("div",{class:"pending"},
+    h("h3",{}, "Da approvare (" + list.length + ")"),
+    h("div",{class:"role",style:"margin-bottom:10px"},"Solo tu vedi questi profili. Compariranno nella directory e nel gioco dopo l'approvazione."),
+    grid);
+}
+function dirView(){
+  const wrap = h("div");
+  wrap.append(shareBox());
+  if (!state.shared && state.loaded){
+    wrap.append(h("div",{class:"note box"}, "Anteprima: in questa vista i dati non vengono salvati in modo condiviso. Aprendo la pagina condivisa dall'azienda, ognuno vedrà gli stessi profili."));
+  }
+  const admin = isAdmin();
+  const pend = state.people.filter(p=>!isApproved(p)).sort(sortName);
+  if (admin && pend.length) wrap.append(pendingPanel(pend));
+
+  const search = h("input",{type:"search",placeholder:"Cerca per nome, soprannome o ruolo…",value:state.q,"aria-label":"Cerca"});
+  const count = h("span",{class:"count"});
+  const grid = h("div",{class:"grid"});
+  wrap.append(h("div",{class:"bar"}, search,
+    h("button",{class:"btn primary",onclick:()=>openForm(null)}, "Aggiungi una persona"), count), grid);
+
+  function draw(){
+    const q = state.q.trim().toLowerCase();
+    const all = state.people.filter(isApproved);
+    const list = all.filter(p => !q || [p.name,p.nick,roleText(p),arr(p.gear).join(" ")].some(v => (v||"").toLowerCase().includes(q))).sort(sortName);
+    count.textContent = list.length + (list.length===1 ? " persona" : " persone");
+    grid.replaceChildren();
+    if (!list.length){
+      grid.style.display = "block";
+      grid.append(h("div",{class:"empty"}, !state.loaded ? "Caricamento…" : all.length ? "Nessun risultato." : "Ancora nessuno. Premi «Aggiungi una persona»."));
+      return;
+    }
+    grid.style.display = "";
+    for (const p of list) grid.append(personCard(p, admin ? [h("button",{class:"btn",onclick:()=>openForm(p)},"Modifica")] : null));
+  }
+  search.addEventListener("input", ()=>{ state.q = search.value; draw(); });
+  draw();
+  return wrap;
+}
+
+/* ---------- add / edit form ---------- */
+function openForm(person){
+  const modal = document.getElementById("modal");
+  const admin = isAdmin();
+  const id = person ? person.id : null;
+  let photo = person ? (person.photo||"") : "";
+  const name = h("input",{type:"text",maxlength:"80",value:person?person.name||"":"",autocomplete:"off"});
+  const nick = h("input",{type:"text",maxlength:"40",value:person?person.nick||"":"",autocomplete:"off"});
+  const curRoles = person ? arr(person.roles) : [];
+  const curCom = person ? cariche(person) : [];
+  const curGear = person ? arr(person.gear) : [];
+  const roleBoxes = ROLES.map(r => h("input",{type:"checkbox",value:r,checked:curRoles.includes(r)}));
+  const comBoxes = COMITATO_ROLES.map(c => h("input",{type:"checkbox",value:c,checked:curCom.includes(c)}));
+  const comPanel = h("div",{class:"companel",style:"display:"+(curRoles.includes("Comitato")?"block":"none")},
+    h("div",{class:"role",style:"margin-bottom:4px"},"Carica nel comitato"),
+    h("div",{class:"checks col"}, COMITATO_ROLES.map((c,i)=>h("label",{}, comBoxes[i], c))));
+  roleBoxes[ROLES.indexOf("Comitato")].addEventListener("change", e => { comPanel.style.display = e.target.checked ? "block" : "none"; });
+  const gearBoxes = GEARS.map(g => h("input",{type:"checkbox",value:g,checked:curGear.includes(g)}));
+  const err = h("div",{class:"err",role:"alert"});
+  const pic = h("div",{class:"photo"});
+  const drawPic = () => { pic.replaceChildren(); if (photo) pic.append(h("img",{src:photo,alt:""})); else pic.textContent = initials(name.value); };
+  drawPic();
+  name.addEventListener("input", ()=>{ if(!photo) drawPic(); });
+  const file = h("input",{type:"file",accept:"image/*",style:"display:none"});
+  file.addEventListener("change", async ()=>{
+    err.textContent = "";
+    if (!file.files[0]) return;
+    try { photo = await fileToSquareJpeg(file.files[0]); drawPic(); }
+    catch(e){ err.textContent = "Non riesco a leggere questa immagine."; }
+  });
+  const save = h("button",{class:"btn primary"},"Salva");
+  const close = () => modal.replaceChildren();
+  let delArmed = false;
+  const del = person ? h("button",{class:"btn danger",onclick:async ()=>{
+    if (!delArmed){ delArmed = true; del.textContent = "Conferma eliminazione"; return; }
+    try { await removePerson(id); close(); } catch(e){ err.textContent = "Eliminazione non riuscita."; }
+  }},"Elimina") : null;
+
+  save.onclick = async () => {
+    err.textContent = "";
+    if (!name.value.trim()){ err.textContent = "Inserisci nome e cognome."; return; }
+    save.disabled = true; save.textContent = "Salvo…";
+    try {
+      await savePerson(id, {name:name.value.trim(), nick:nick.value.trim(), roles:roleBoxes.filter(b=>b.checked).map(b=>b.value), comitato:(roleBoxes[ROLES.indexOf("Comitato")].checked ? comBoxes.filter(b=>b.checked).map(b=>b.value) : []), gear:gearBoxes.filter(b=>b.checked).map(b=>b.value), photo, approved: person ? isApproved(person) : admin, updated:Date.now()});
+      if (!admin && !person) { thanks(); } else close();
+    } catch(e){
+      err.textContent = "Salvataggio non riuscito. Riprova tra poco.";
+      save.disabled = false; save.textContent = "Salva";
+    }
+  };
+  const box = h("div",{class:"modal",role:"dialog","aria-modal":"true","aria-label":"Profilo"},
+    h("h2",{}, person ? "Modifica profilo" : "Aggiungi una persona"),
+    !person && !admin ? h("div",{class:"role",style:"margin:-6px 0 12px"},"Il profilo comparirà nella directory dopo l'approvazione dell'amministratore.") : null,
+    h("div",{class:"field"}, h("div",{class:"pic"}, pic,
+      h("div",{}, h("button",{class:"btn",type:"button",onclick:()=>file.click()}, photo?"Cambia foto":"Scegli una foto"), file,
+        h("div",{class:"role",style:"margin-top:6px"},"Meglio un volto ben visibile, da vicino.")))),
+    h("div",{class:"field"}, h("label",{},"Nome e cognome"), name),
+    h("div",{class:"field"}, h("label",{},"Soprannome"), nick),
+    h("div",{class:"field"}, h("label",{},"Ruolo"), h("div",{class:"checks"}, ROLES.map((r,i)=>h("label",{}, roleBoxes[i], r))), comPanel),
+    h("div",{class:"field"}, h("label",{},"Attrezzo"), h("div",{class:"checks"}, GEARS.map((g,i)=>h("label",{}, gearBoxes[i], g)))),
+    err,
+    h("div",{class:"actions"}, del, h("button",{class:"btn",onclick:close},"Annulla"), save));
+  function thanks(){
+    const again = h("button",{class:"btn"},"Aggiungi un'altra persona");
+    again.onclick = () => openForm(null);
+    ov.firstChild.replaceWith(h("div",{class:"modal"},
+      h("h2",{},"Grazie!"),
+      h("p",{},"Il profilo di " + name.value.trim() + " è stato inviato. Comparirà nella directory dopo l'approvazione dell'amministratore."),
+      h("div",{class:"actions"}, again, h("button",{class:"btn primary",onclick:close},"Chiudi"))));
+  }
+  const ov = h("div",{class:"overlay"}, box);
+  ov.addEventListener("mousedown", e => { if (e.target===ov) close(); });
+  modal.replaceChildren(ov);
+  name.focus();
+}
+
+/* ---------- game ---------- */
+function roleSet(p){ return {roles: ROLES.filter(r=>arr(p.roles).includes(r)), com: cariche(p), gear: GEARS.filter(g=>arr(p.gear).includes(g))}; }
+const MODES = [
+  {id:"photo", label:"Foto → Nome", min:4, rounds:10},
+  {id:"name",  label:"Nome → Foto", min:4, rounds:10},
+  {id:"hard",  label:"Super hard: compila la scheda", min:1, rounds:5}
+];
+const fmt = n => String(Math.round(n*10)/10).replace(".", ",");
+const norm = s => (s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+function lev(a, b){
+  const m = a.length, n = b.length; if (!m) return n; if (!n) return m;
+  let prev = Array.from({length:n+1}, (_,j)=>j);
+  for (let i=1;i<=m;i++){
+    const cur = [i];
+    for (let j=1;j<=n;j++) cur[j] = Math.min(prev[j]+1, cur[j-1]+1, prev[j-1] + (a[i-1]===b[j-1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[n];
+}
+const sortTok = s => s.split(" ").sort().join(" ");
+// 1 = giusto, 0.5 = quasi (piccoli errori di scrittura), 0 = sbagliato. Maiuscole/accenti ignorati; ordine nome/cognome indifferente.
+function judgeText(input, target){
+  const t = norm(input), g = norm(target);
+  if (!t) return 0;
+  const d = Math.min(lev(t, g), lev(sortTok(t), sortTok(g)));
+  if (d === 0) return 1;
+  const lim = g.length <= 3 ? 0 : Math.min(3, Math.max(1, Math.floor(g.length * 0.2)));
+  return d <= lim ? 0.5 : 0;
+}
+const mark = (pts, max) => pts >= max ? "ok" : pts > 0 ? "near" : "bad";
+const markIcon = c => c==="ok" ? "✓" : c==="near" ? "≈" : "✗";
+
+const game = {
+  mode:"photo", rounds:[], i:0, score:0, max:0, answered:false,
+  reset(){ this.rounds=[]; this.i=0; this.score=0; this.max=0; this.answered=false; },
+  pool(){ return state.people.filter(p=>p.photo && p.name && p.approved !== false); },
+  start(){
+    const pool = this.pool(), cfg = MODES.find(m=>m.id===this.mode);
+    const picks = shuffle(pool).slice(0, Math.min(cfg.rounds, pool.length));
+    this.rounds = picks.map(p => ({ target:p, options: shuffle([p, ...shuffle(pool.filter(x=>x.id!==p.id)).slice(0,3)]) }));
+    this.i = 0; this.score = 0; this.max = 0; this.answered = false;
+  }
+};
+
+function infoLines(p){
+  return h("div",{class:"chips",style:"justify-content:center"},
+    roleList(p).filter(r => !(r==="Comitato" && cariche(p).length)).map(r=>h("span",{class:"team"},r)), arr(p.gear).map(g=>h("span",{class:"team gear"},g)),
+    !roleList(p).length && !arr(p.gear).length ? h("span",{class:"role"},"Nessun ruolo o attrezzo indicato") : null);
+}
+function revealCard(p, withPhoto){
+  return h("div",{class:"reveal"},
+    withPhoto ? h("div",{class:"photo small"}, p.photo ? h("img",{src:p.photo,alt:""}) : initials(p.name)) : null,
+    h("div",{class:"name"}, p.name),
+    p.nick ? h("div",{class:"nick"}, "«" + p.nick + "»") : null,
+    infoLines(p));
+}
+
+function gameView(){
+  const wrap = h("div",{class:"game"});
+  wrap.append(h("div",{class:"modes"}, MODES.map(m =>
+    h("button",{class:"btn","aria-pressed":game.mode===m.id,onclick:()=>{game.mode=m.id;game.reset();render();}}, m.label))));
+  const pool = game.pool(), cfg = MODES.find(m=>m.id===game.mode);
+  if (pool.length < cfg.min){
+    wrap.append(h("div",{class:"empty"}, "Servono almeno " + cfg.min + " persone con foto per giocare. Ora ce ne sono " + pool.length + ". Aggiungi o approva qualche profilo con foto dalla Directory!"));
+    return wrap;
+  }
+  if (!game.rounds.length) game.start();
+
+  if (game.i >= game.rounds.length){
+    const ratio = game.max ? game.score / game.max : 0;
+    wrap.append(h("div",{class:"q"},
+      h("div",{class:"role"},"Risultato"),
+      h("div",{class:"final"}, fmt(game.score) + " / " + fmt(game.max)),
+      h("p",{}, ratio>=0.999 ? "Perfetto! Conosci proprio tutti." : ratio>=0.6 ? "Bene! Ancora un giro per ripassare." : "Si impara giocando: riprova."),
+      h("button",{class:"btn primary",onclick:()=>{game.start();render();}},"Gioca ancora")));
+    return wrap;
+  }
+  const r = game.rounds[game.i], t = r.target;
+  const fb = h("div",{class:"fb"});
+  const next = h("button",{class:"btn primary",onclick:()=>{game.i++;game.answered=false;render();}}, game.i+1<game.rounds.length ? "Avanti" : "Vedi il risultato");
+  const finish = (pts, max, ...nodes) => {
+    if (game.answered) return; game.answered = true; game.score += pts; game.max += max;
+    fb.replaceChildren(...nodes.filter(Boolean), next); next.focus();
+    if (fb.scrollIntoView) fb.scrollIntoView({block:"nearest",behavior:"smooth"});
+  };
+  let body;
+
+  if (game.mode==="photo" || game.mode==="name"){
+    const optEls = [];
+    const opts = h("div",{class:"opts"});
+    const answer = (p, el) => {
+      if (game.answered) return;
+      optEls.forEach(([q,e]) => { e.disabled = true; if (q.id===t.id) e.classList.add("ok"); else if (e===el) e.classList.add("bad"); });
+      const ok = p.id===t.id;
+      finish(ok ? 1 : 0, 1, h("strong",{class:ok?"okt":"badt"}, ok ? "Esatto!" : "Era " + fullLabel(t)), revealCard(t, game.mode==="name"));
+    };
+    for (const p of r.options){
+      const el = game.mode==="photo"
+        ? h("button",{class:"opt"}, p.name, p.nick ? h("small",{}, "«" + p.nick + "»") : null)
+        : h("button",{class:"opt pic","aria-label":"Foto di una persona"}, photoEl(p));
+      el.addEventListener("click", ()=>answer(p, el));
+      optEls.push([p, el]); opts.append(el);
+    }
+    body = [game.mode==="photo" ? [photoEl(t), h("h2",{},"Chi è questa persona?")] : h("h2",{}, "Qual è la foto di " + fullLabel(t) + "?"), opts];
+
+  } else { // hard: compila tutta la scheda
+    const name = h("input",{type:"text",maxlength:"80",autocomplete:"off","aria-label":"Nome e cognome"});
+    const nick = h("input",{type:"text",maxlength:"40",autocomplete:"off","aria-label":"Soprannome"});
+    const roleBoxes = ROLES.map(() => h("input",{type:"checkbox"}));
+    const comBoxes = COMITATO_ROLES.map(() => h("input",{type:"checkbox"}));
+    const comPanel = h("div",{class:"companel",style:"display:none"}, h("div",{class:"role",style:"margin-bottom:4px"},"Carica nel comitato"),
+      h("div",{class:"checks col"}, COMITATO_ROLES.map((c,i)=>h("label",{}, comBoxes[i], c))));
+    const comIdx = ROLES.indexOf("Comitato");
+    roleBoxes[comIdx].addEventListener("change", () => { comPanel.style.display = roleBoxes[comIdx].checked ? "block" : "none"; });
+    const gearBoxes = GEARS.map(() => h("input",{type:"checkbox"}));
+    const check = h("button",{class:"btn primary"},"Verifica la scheda");
+
+    const submit = () => {
+      if (game.answered) return;
+      const rows = [];
+      // nome
+      const sn = judgeText(name.value, t.name);
+      rows.push({label:"Nome e cognome", yours:name.value.trim()||"—", right:t.name, pts:sn, max:1});
+      // soprannome (solo se la persona ne ha uno)
+      if (t.nick) rows.push({label:"Soprannome", yours:nick.value.trim()||"—", right:"«"+t.nick+"»", pts:judgeText(nick.value, t.nick), max:1});
+      // ruolo (solo se indicato)
+      const want = roleSet(t);
+      if (want.roles.length){
+        let errors = 0;
+        roleBoxes.forEach((b,i) => { if (b.checked !== want.roles.includes(ROLES[i])) errors++; });
+        rows.push({label:"Ruolo", yours:ROLES.filter((x,i)=>roleBoxes[i].checked).join(", ")||"—", right:want.roles.join(", "), pts:Math.max(0, 1 - 0.5*errors), max:1});
+      }
+      // carica nel comitato (solo se indicata)
+      if (want.com.length){
+        const mine = COMITATO_ROLES.filter((c,i)=>roleBoxes[comIdx].checked && comBoxes[i].checked);
+        const errors = COMITATO_ROLES.filter(c => mine.includes(c) !== want.com.includes(c)).length;
+        rows.push({label:"Carica in comitato", yours:mine.join(", ")||"—", right:want.com.join(", "), pts:Math.max(0, 1 - 0.5*errors), max:1});
+      }
+      // attrezzo (solo se indicato)
+      if (arr(t.gear).length){
+        let errors = 0; gearBoxes.forEach((b,i) => { if (b.checked !== arr(t.gear).includes(GEARS[i])) errors++; });
+        rows.push({label:"Attrezzo", yours:GEARS.filter((x,i)=>gearBoxes[i].checked).join(", ")||"—", right:arr(t.gear).join(", "), pts:Math.max(0, 1 - 0.5*errors), max:1});
+      }
+      [name, nick, ...roleBoxes, ...comBoxes, ...gearBoxes, check].forEach(el => el.disabled = true);
+      const pts = rows.reduce((a,x)=>a+x.pts,0), max = rows.reduce((a,x)=>a+x.max,0);
+      const table = h("div",{class:"review"}, rows.map(x => {
+        const c = mark(x.pts, x.max);
+        return h("div",{class:"rv " + c},
+          h("div",{class:"rl"}, x.label),
+          h("div",{class:"rt"}, c==="ok" ? x.right : [h("div",{}, "Tu: ", x.yours), h("div",{class:"ans"}, "Giusto: ", x.right)]),
+          h("div",{class:"rp"}, markIcon(c) + " " + fmt(x.pts) + "/" + x.max));
+      }));
+      finish(pts, max,
+        h("strong",{class:mark(pts,max)==="ok"?"okt":""}, "Questa scheda: " + fmt(pts) + " / " + max),
+        table,
+        h("div",{class:"role",style:"margin-top:6px"},"✓ giusto = 1 punto · ≈ quasi giusto = 0,5 · ✗ sbagliato = 0"));
+    };
+    check.onclick = submit;
+    name.addEventListener("keydown", e => { if (e.key==="Enter") submit(); });
+    nick.addEventListener("keydown", e => { if (e.key==="Enter") submit(); });
+    body = [photoEl(t), h("h2",{},"Compila la scheda di questa persona"),
+      h("div",{class:"hardform"},
+        h("div",{class:"field"}, h("label",{},"Nome e cognome"), name),
+        h("div",{class:"field"}, h("label",{},"Soprannome (se ne ha uno)"), nick),
+        h("div",{class:"field"}, h("label",{},"Ruolo"), h("div",{class:"checks"}, ROLES.map((x,i)=>h("label",{}, roleBoxes[i], x))), comPanel),
+        h("div",{class:"field"}, h("label",{},"Attrezzo"), h("div",{class:"checks"}, GEARS.map((x,i)=>h("label",{}, gearBoxes[i], x)))),
+        check)];
+  }
+  wrap.append(
+    h("div",{class:"prog"}, h("span",{},"Domanda " + (game.i+1) + " di " + game.rounds.length), h("span",{},"Punti: " + fmt(game.score))),
+    h("div",{class:"q"}, body, fb));
+  return wrap;
+}
+
+render();
+initData();
+</script>
+</body>
+</html>
