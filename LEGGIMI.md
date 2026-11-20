@@ -1,4 +1,4 @@
-# Chi è chi — directory con foto e gioco per imparare i nomi
+# Club Quiz — directory con foto e gioco per imparare i nomi
 
 Sito statico (una pagina) + database Supabase.
 - **Visitatori** (senza account): aprono il link del gruppo, guardano la directory, giocano e **propongono** nuove persone.

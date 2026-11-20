@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Chi è chi</title>
+<title>Club Quiz</title>
 <style>
 :root{
   --bg:#f6f5f1;--surface:#fff;--ink:#1d1d1b;--muted:#6b6a64;--line:#e3e1d9;
@@ -113,7 +113,7 @@ nav[hidden]{display:none}
 </head>
 <body>
 <header>
-  <h1><span id="title">Chi è chi</span> <small id="sub"></small></h1>
+  <h1><span id="title">Club Quiz</span> <small id="sub"></small></h1>
   <div id="auth" class="authbar"></div>
   <nav role="tablist" id="nav" hidden>
     <button role="tab" id="tab-dir" aria-selected="true">Impara</button>
@@ -305,9 +305,9 @@ function authBar(){
 function render(){
   const inCo = !!(state.slug && state.company);
   document.getElementById("nav").hidden = !inCo;
-  document.getElementById("title").textContent = inCo ? state.company.name : "Chi è chi";
+  document.getElementById("title").textContent = inCo ? state.company.name : "Club Quiz";
   document.getElementById("sub").textContent = inCo ? (state.admin ? "Vista amministratore" : "Album e gioco per conoscerci meglio") : "La directory con foto e il gioco per imparare i nomi";
-  document.title = inCo ? state.company.name + " – Chi è chi" : "Chi è chi";
+  document.title = inCo ? state.company.name + " – Club Quiz" : "Club Quiz";
   document.getElementById("tab-dir").setAttribute("aria-selected", state.view==="dir");
   document.getElementById("tab-game").setAttribute("aria-selected", state.view==="game");
   document.getElementById("tab-board").setAttribute("aria-selected", state.view==="board");
