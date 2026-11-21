@@ -122,17 +122,20 @@ nav[hidden]{display:none}
 .sedsubs{margin:4px 0 6px 18px;padding-left:10px;border-left:3px solid var(--accent);display:flex;flex-direction:column;gap:6px}
 .ib{padding:5px 9px;white-space:nowrap}
 details.sedwrap{border-top:1px solid var(--line);padding-top:10px}
+.clubhome{max-width:520px;margin:8px auto 0}
+.playnow{display:block;width:100%;font-size:24px;font-weight:700;padding:22px 16px;border-radius:16px;box-shadow:0 6px 18px color-mix(in srgb,var(--accent) 35%,transparent)}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tile{font:inherit;font-size:15px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:92px;padding:12px 8px;border-radius:14px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;text-align:center}
+.tile:active{transform:scale(.98)}.tile .ti{font-size:26px;line-height:1}
+.pagehead{display:flex;align-items:center;gap:10px;margin:0 0 12px}.pagehead h2{margin:0;font-size:20px}
+.adminbox{margin-top:22px}.adminrow{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.sharebtn{width:100%;margin:6px 0 4px}
 </style>
 </head>
 <body>
 <header>
   <h1><span id="title">Club Quiz</span> <small id="sub"></small></h1>
   <div id="auth" class="authbar"></div>
-  <nav role="tablist" id="nav" hidden>
-    <button role="tab" id="tab-dir" aria-selected="true">Impara</button>
-    <button role="tab" id="tab-game" aria-selected="false">Gioca</button>
-    <button role="tab" id="tab-board" aria-selected="false">Classifica</button>
-  </nav>
 </header>
 <main id="main"></main>
 <div id="modal"></div>
@@ -261,11 +264,30 @@ async function loadPeople(){
   state.people = rows.map(fromRow); state.loaded = true; render();
 }
 
+const SUBPAGES = { gioca:"game", classifica:"board", elenco:"dir" };
+const PAGE_OF = { game:"gioca", board:"classifica", dir:"elenco" };
+let lastHash = location.hash;
+function navTo(view){ location.hash = state.slug + (PAGE_OF[view] ? "/" + PAGE_OF[view] : ""); }
 async function route(){
+  let raw = location.hash.replace(/^#/, "");
+  if (/(^|&)(access_token|error|type)=/.test(raw)){ history.replaceState(null, "", location.pathname); raw = ""; }
+  const [slug, sub] = raw.split("/");
+  const view = SUBPAGES[sub] || "home";
+  // Partita in corso e si sta uscendo (tasto indietro del telefono o link): chiedi conferma
+  if (state.view==="game" && game.inProgress() && !(slug===state.slug && view==="game")){
+    const back = lastHash;
+    confirmLeave(() => { lastHash = location.hash; route(); }, () => { history.pushState(null, "", location.pathname + back); });
+    return;
+  }
+  lastHash = location.hash;
+  // Stessa directory: cambia solo pagina, senza ricaricare i dati
+  if (slug && state.company && slug===state.slug){
+    if (view==="game" && state.view!=="game") game.reset();
+    state.view = view; render(); window.scrollTo(0, 0);
+    return;
+  }
   const my = ++routeToken;
-  let slug = location.hash.replace(/^#/, "");
-  if (/(^|&)(access_token|error|type)=/.test(slug)){ history.replaceState(null, "", location.pathname); slug = ""; }
-  Object.assign(state, {people:[], q:"", notFound:false, company:null, admin:false, loaded:false, view:"dir", slug:null});
+  Object.assign(state, {people:[], q:"", notFound:false, company:null, admin:false, loaded:false, view, slug:null});
   game.reset();
   if (state.configMissing){ render(); return; }
   if (!slug){ state.loaded = true; render(); return; }
@@ -306,7 +328,7 @@ async function initData(){
   route();
 }
 window.addEventListener("hashchange", route);
-document.addEventListener("visibilitychange", () => { if (!document.hidden && state.company && state.view==="dir") loadPeople().catch(()=>{}); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden && state.company && (state.view==="dir" || state.view==="home")) loadPeople().catch(()=>{}); });
 
 async function signIn(email, password){
   const { error } = await sb.auth.signInWithPassword({ email, password });
@@ -393,22 +415,17 @@ function authBar(){
 }
 function render(){
   const inCo = !!(state.slug && state.company);
-  document.getElementById("nav").hidden = !inCo;
   document.getElementById("title").textContent = inCo ? state.company.name : "Club Quiz";
   document.getElementById("sub").textContent = inCo ? (state.admin ? "Vista amministratore" : "Album e gioco per conoscerci meglio") : "La directory con foto e il gioco per imparare i nomi";
   document.title = inCo ? state.company.name + " – Club Quiz" : "Club Quiz";
-  document.getElementById("tab-dir").setAttribute("aria-selected", state.view==="dir");
-  document.getElementById("tab-game").setAttribute("aria-selected", state.view==="game");
-  document.getElementById("tab-board").setAttribute("aria-selected", state.view==="board");
   authBar();
   if (state.configMissing) main.replaceChildren(h("div",{class:"note box"}, "Configurazione mancante: apri il file config.js e inserisci l'indirizzo e la chiave pubblica del tuo progetto Supabase (vedi LEGGIMI.md)."));
   else if (!state.slug) main.replaceChildren(homeView());
   else if (!state.company) main.replaceChildren(h("div",{class:"empty"}, state.loadError ? "Non riesco a caricare i dati. Controlla la connessione e ricarica la pagina." : "Caricamento…"));
-  else main.replaceChildren(state.view==="dir" ? dirView() : state.view==="board" ? boardView() : gameView());
+  else if (state.view==="home") main.replaceChildren(clubHome());
+  else main.replaceChildren(pageHead(state.view==="dir" ? "Elenco" : state.view==="board" ? "Classifica" : "Gioca"),
+    state.view==="dir" ? dirView() : state.view==="board" ? boardView() : gameView());
 }
-document.getElementById("tab-dir").onclick = () => confirmLeave(() => { state.view="dir"; render(); });
-document.getElementById("tab-board").onclick = () => confirmLeave(() => { state.view="board"; render(); });
-document.getElementById("tab-game").onclick = () => { if (state.view!=="game"){ state.view="game"; game.reset(); render(); } };
 
 function homeView(){
   const wrap = h("div",{class:"home"});
@@ -644,28 +661,70 @@ async function changeLink(){
   if (error) throw error;
   location.hash = slug;
 }
-function shareBox(){
-  const link = location.origin + location.pathname + "#" + state.slug;
-  const inp = h("input",{type:"text",readonly:true,value:link,"aria-label":"Link della directory"});
+const clubLink = () => location.origin + location.pathname + "#" + state.slug;
+function openShare(){
+  const link = clubLink();
+  const modal = document.getElementById("modal"); const close = () => modal.replaceChildren();
+  const inp = h("input",{type:"text",readonly:true,value:link,"aria-label":"Link del gruppo"});
   inp.addEventListener("focus", () => inp.select());
   const cp = h("button",{class:"btn"},"Copia");
   cp.onclick = async () => {
-    try { await navigator.clipboard.writeText(link); cp.textContent = "Copiato"; }
-    catch(e){ inp.select(); cp.textContent = "Seleziona e copia"; }
+    try { await navigator.clipboard.writeText(link); cp.textContent = "Copiato ✓"; }
+    catch(e){ inp.focus(); inp.select(); cp.textContent = "Seleziona e copia"; }
     setTimeout(()=>{ cp.textContent = "Copia"; }, 2500);
   };
-  return h("div",{class:"note box share"},
-    h("strong",{},"Link da condividere con i colleghi"),
-    h("div",{class:"linkrow"}, inp, cp),
-    h("div",{class:"role"}, state.admin ? "Chiunque apre questo link può proporre nuove persone: compaiono dopo la tua approvazione." : "Chiunque apre questo link può proporre nuove persone: compaiono dopo l'approvazione dell'amministratore."),
-    h("div",{style:"display:flex;gap:14px;flex-wrap:wrap;margin-top:6px"},
-      h("button",{class:"linkbtn",type:"button",onclick:showPrivacy},"Privacy"),
-      state.admin ? (() => { let armed = false; const b = h("button",{class:"linkbtn",type:"button"},"Cambia link");
-        b.onclick = async () => {
-          if (!armed){ armed = true; b.textContent = "Conferma: il vecchio link smetterà di funzionare"; setTimeout(()=>{ armed=false; b.textContent="Cambia link"; }, 5000); return; }
-          b.disabled = true; try { await changeLink(); } catch(e){ b.textContent = "Errore, riprova"; b.disabled = false; armed = false; }
-        }; return b; })() : null),
-    state.admin ? h("a",{href:"#",class:"minelink",style:"margin-top:8px",onclick:e=>{ if (game.inProgress()){ e.preventDefault(); confirmLeave(()=>{ location.hash=""; }); } }},"← Le tue directory") : null);
+  const canShare = typeof navigator.share === "function";
+  const sh = canShare ? h("button",{class:"btn primary sharebtn"},"Condividi…") : null;
+  if (sh) sh.onclick = async () => {
+    try { await navigator.share({ title: state.company.name + " – Club Quiz", text: "Conosci tutti i membri di " + state.company.name + "? Mettiti alla prova:", url: link }); }
+    catch(e){ /* condivisione annullata */ }
+  };
+  const ov = h("div",{class:"overlay"}, h("div",{class:"modal",role:"dialog","aria-modal":"true","aria-label":"Condividi il link"},
+    h("h2",{},"Condividi il link"),
+    h("p",{class:"role",style:"margin:0 0 6px"}, "Manda questo link ai membri del gruppo: con il link si gioca, si consulta l'elenco e si possono proporre nuove persone (pubblicate dopo l'approvazione dell'amministratore)."),
+    sh, h("div",{class:"linkrow"}, inp, cp),
+    h("p",{class:"role",style:"margin:6px 0 0"}, "Condividilo solo con i membri: chi ha il link vede foto e nomi. ",
+      h("button",{class:"linkbtn",type:"button",onclick:showPrivacy},"Privacy")),
+    h("div",{class:"actions"}, h("button",{class:"btn",onclick:close},"Chiudi"))));
+  ov.addEventListener("mousedown", e => { if (e.target===ov) close(); });
+  modal.replaceChildren(ov);
+}
+function pageHead(title){
+  return h("div",{class:"pagehead"},
+    h("button",{class:"btn small",onclick:()=>navTo("home"),"aria-label":"Torna al menu"},"← Menu"),
+    h("h2",{}, title));
+}
+function clubHome(){
+  const admin = isAdmin();
+  const n = state.people.filter(isApproved).length;
+  const pend = admin ? state.people.filter(p=>!isApproved(p)).length : 0;
+  const tile = (icon, label, fn) => h("button",{class:"tile",onclick:fn}, h("span",{class:"ti","aria-hidden":"true"}, icon), h("span",{}, label));
+  const wrap = h("div",{class:"clubhome"},
+    h("button",{class:"btn primary playnow",onclick:()=>navTo("game")}, "▶  Gioca ora"),
+    h("div",{class:"role",style:"text-align:center;margin:8px 0 18px"},
+      !state.loaded ? "Caricamento…" : n ? n + (n===1 ? " persona" : " persone") + " nell'album. Quanti ne riconosci?" : "L'album è ancora vuoto: aggiungi le prime persone!"),
+    h("div",{class:"tiles"},
+      tile("🏆","Classifica",()=>navTo("board")),
+      tile("➕","Aggiungi una persona",()=>openForm(null)),
+      tile("📖","Elenco",()=>navTo("dir")),
+      tile("🔗","Condividi il link",openShare)),
+    h("div",{style:"text-align:center;margin-top:14px"}, h("button",{class:"linkbtn",type:"button",onclick:showPrivacy,style:"align-self:center"},"Privacy")));
+  if (admin){
+    let armed = false; const cl = h("button",{class:"btn small"},"Cambia link");
+    cl.onclick = async () => {
+      if (!armed){ armed = true; cl.textContent = "Conferma: il vecchio link smetterà di funzionare"; setTimeout(()=>{ armed=false; cl.textContent="Cambia link"; }, 5000); return; }
+      cl.disabled = true; try { await changeLink(); } catch(e){ cl.textContent = "Errore, riprova"; cl.disabled = false; armed = false; }
+    };
+    wrap.append(h("div",{class:"note box adminbox"},
+      h("strong",{},"Amministrazione"),
+      h("div",{class:"adminrow"},
+        h("button",{class:"btn small" + (pend ? " primary" : ""),onclick:()=>navTo("dir")}, "Da approvare (" + pend + ")"),
+        h("button",{class:"btn small",onclick:openStructure},"Modifica la scheda"),
+        h("button",{class:"btn small",onclick:e=>downloadBackup(e.currentTarget)},"Scarica backup"),
+        cl),
+      h("a",{href:"#",class:"minelink",style:"margin-top:8px"},"← Le tue directory")));
+  }
+  return wrap;
 }
 
 const isApproved = p => p.approved !== false;
@@ -700,7 +759,6 @@ function pendingPanel(list){
 }
 function dirView(){
   const wrap = h("div");
-  wrap.append(shareBox());
   if (!state.shared && state.loaded){
     wrap.append(h("div",{class:"note box"}, "Anteprima: in questa vista i dati non vengono salvati in modo condiviso. Aprendo la pagina condivisa dall'azienda, ognuno vedrà gli stessi profili."));
   }
@@ -713,8 +771,7 @@ function dirView(){
   const grid = h("div",{class:"grid"});
   wrap.append(h("div",{class:"bar"}, search,
     h("button",{class:"btn primary",onclick:()=>openForm(null)}, "Aggiungi una persona"),
-    admin ? h("button",{class:"btn",onclick:openStructure}, "Modifica la scheda") : null,
-    admin ? h("button",{class:"btn",onclick:e=>downloadBackup(e.currentTarget)}, "Scarica backup") : null, count), grid);
+    count), grid);
 
   function draw(){
     const q = state.q.trim().toLowerCase();
@@ -897,16 +954,17 @@ const game = {
 };
 
 // Conferma prima di uscire da una partita in corso
-function confirmLeave(then){
+function confirmLeave(then, cancel){
   if (!game.inProgress()){ then(); return; }
   const modal = document.getElementById("modal"); const close = () => modal.replaceChildren();
+  const stay = () => { close(); if (cancel) cancel(); };
   const yes = h("button",{class:"btn danger"},"Sì, esci"), no = h("button",{class:"btn primary"},"No, continua");
-  yes.onclick = () => { close(); game.reset(); then(); }; no.onclick = close;
+  yes.onclick = () => { close(); game.reset(); then(); }; no.onclick = stay;
   const ov = h("div",{class:"overlay"}, h("div",{class:"modal",role:"alertdialog","aria-modal":"true"},
     h("h2",{},"Uscire dalla partita?"),
     h("p",{},"La partita in corso andrà persa e il punteggio non verrà salvato in classifica."),
     h("div",{class:"actions"}, yes, no)));
-  ov.addEventListener("mousedown", e => { if (e.target===ov) close(); });
+  ov.addEventListener("mousedown", e => { if (e.target===ov) stay(); });
   modal.replaceChildren(ov); no.focus();
 }
 window.addEventListener("beforeunload", e => { if (game.inProgress()){ e.preventDefault(); e.returnValue = ""; } });
@@ -921,7 +979,7 @@ function setupView(wrap){
     h("h2",{},"Nuova partita"),
     h("div",{class:"role",style:"text-align:left"},"Tipo di gioco"),
     h("div",{class:"choicecol"}, MODES.map(m => h("button",{class:"btn","aria-pressed":game.mode===m.id,onclick:()=>{game.mode=m.id;render();}}, m.label))),
-    !enough ? h("div",{class:"empty"}, "Per questo gioco servono almeno " + cfg.min + " persone con foto. Ora ce ne sono " + pool.length + ". Aggiungi o approva qualche profilo con foto dalla pagina Impara!") : [
+    !enough ? h("div",{class:"empty"}, "Per questo gioco servono almeno " + cfg.min + " persone con foto. Ora ce ne sono " + pool.length + ". Aggiungi o approva qualche profilo con foto dall'Elenco!") : [
       h("div",{class:"role",style:"text-align:left;margin-top:12px"},"Numero di domande"),
       h("div",{class:"choicerow"}, KINDS.map(k => {
         const disabled = k.id!=="all" && +k.id > pool.length;
@@ -940,7 +998,7 @@ function endView(wrap){
   let saveBox;
   if (game.saved){
     saveBox = h("div",{class:"savebox"}, h("strong",{class:"okt"},"Punteggio salvato!"),
-      h("button",{class:"btn",onclick:()=>{ board.mode=game.mode; board.kind=game.kind; state.view="board"; render(); }},"Vedi la classifica"));
+      h("button",{class:"btn",onclick:()=>{ board.mode=game.mode; board.kind=game.kind; navTo("board"); }},"Vedi la classifica"));
   } else {
     let saved = ""; try { saved = localStorage.getItem("album.player") || ""; } catch(e){}
     const nm = h("input",{type:"text",maxlength:"30",placeholder:"Il tuo nome",value:saved,autocomplete:"off","aria-label":"Il tuo nome"});
@@ -967,7 +1025,7 @@ function endView(wrap){
     saveBox,
     h("div",{style:"display:flex;gap:8px;justify-content:center;margin-top:12px;flex-wrap:wrap"},
       h("button",{class:"btn primary",onclick:()=>{game.reset();render();}},"Gioca ancora"),
-      h("button",{class:"btn",onclick:()=>{ board.mode=game.mode; board.kind=game.kind; state.view="board"; render(); }},"Classifica"))));
+      h("button",{class:"btn",onclick:()=>{ board.mode=game.mode; board.kind=game.kind; game.reset(); navTo("board"); }},"Classifica"))));
 }
 
 function gameView(){
@@ -1055,8 +1113,7 @@ function boardView(){
   const selM = h("select",{"aria-label":"Tipo di gioco"}, MODES.map(m=>h("option",{value:m.id,selected:m.id===board.mode},m.label)));
   const selK = h("select",{"aria-label":"Numero di domande"}, KINDS.map(k=>h("option",{value:k.id,selected:k.id===board.kind},k.label)));
   const box = h("div",{class:"boardbox"}, h("div",{class:"empty"},"Caricamento…"));
-  wrap.append(h("h2",{style:"margin:0 0 10px;font-size:20px"},"Classifica"),
-    h("div",{class:"bar"}, selM, selK),
+  wrap.append(h("div",{class:"bar"}, selM, selK),
     h("div",{class:"role",style:"margin-bottom:10px"},"Ordinata per percentuale di punti; a parità, vince chi ha impiegato meno tempo. Conta il miglior risultato di ogni nome."),
     box);
   async function load(){
