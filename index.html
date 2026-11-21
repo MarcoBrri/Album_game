@@ -702,7 +702,7 @@ function clubHome(){
   const wrap = h("div",{class:"clubhome"},
     h("button",{class:"btn primary playnow",onclick:()=>navTo("game")}, "▶  Gioca ora"),
     h("div",{class:"role",style:"text-align:center;margin:8px 0 18px"},
-      !state.loaded ? "Caricamento…" : n ? n + (n===1 ? " persona" : " persone") + " nell'album. Quanti ne riconosci?" : "L'album è ancora vuoto: aggiungi le prime persone!"),
+      !state.loaded ? "Caricamento…" : n ? n + (n===1 ? " persona" : " persone") + " nell'album. Quante ne riconosci?" : "L'album è ancora vuoto: aggiungi le prime persone!"),
     h("div",{class:"tiles"},
       tile("🏆","Classifica",()=>navTo("board")),
       tile("➕","Aggiungi una persona",()=>openForm(null)),
