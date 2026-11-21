@@ -89,6 +89,7 @@ create table if not exists public.clubs (
   name       text not null check (char_length(name) between 2 and 60),
   fields     jsonb not null default '[]'::jsonb constraint clubs_fields_valid check (public.valid_fields(fields)),
   use_nick   boolean not null default true,
+  game_enabled boolean not null default true,
   owner_id   uuid not null default auth.uid() references auth.users(id) on delete cascade,
   created_at timestamptz not null default now()
 );
@@ -126,18 +127,22 @@ create policy people_owner on public.people
 grant select, insert, update, delete on public.clubs, public.people to authenticated;
 
 -- ───────────── Funzioni pubbliche (usate dal link condiviso, senza account) ─────────────
-create or replace function public.club_info(p_slug text)
-returns table (id uuid, name text, fields jsonb, use_nick boolean)
+drop function if exists public.club_info(text);
+create function public.club_info(p_slug text)
+returns table (id uuid, name text, fields jsonb, use_nick boolean, game_enabled boolean, members int)
 language sql stable security definer set search_path = public as $$
-  select c.id, c.name, c.fields, c.use_nick from public.clubs c where c.slug = p_slug;
+  select c.id, c.name, c.fields, c.use_nick, c.game_enabled,
+         (select count(*)::int from public.people p where p.club_id = c.id and p.status = 'approved')
+  from public.clubs c where c.slug = p_slug;
 $$;
 
+-- Solo persone approvate, e solo se il gioco è attivo
 create or replace function public.club_members(p_slug text)
 returns table (id uuid, name text, nick text, data jsonb, photo text)
 language sql stable security definer set search_path = public as $$
   select p.id, p.name, p.nick, p.data, p.photo
   from public.people p join public.clubs c on c.id = p.club_id
-  where c.slug = p_slug and p.status = 'approved'
+  where c.slug = p_slug and p.status = 'approved' and c.game_enabled
   order by p.name;
 $$;
 
@@ -215,10 +220,11 @@ create or replace function public.submit_score(
   p_slug text, p_player text, p_mode text, p_kind text, p_n int, p_score numeric, p_max numeric, p_seconds int
 ) returns void
 language plpgsql security definer set search_path = public as $$
-declare v_club uuid;
+declare v_club uuid; v_on boolean;
 begin
-  select id into v_club from public.clubs where slug = p_slug;
+  select id, game_enabled into v_club, v_on from public.clubs where slug = p_slug;
   if v_club is null then raise exception 'club_not_found'; end if;
+  if not v_on then raise exception 'game_disabled'; end if;
   if p_player is null or char_length(btrim(p_player)) not between 1 and 30 then raise exception 'invalid_player'; end if;
   if (select count(*) from public.scores where club_id = v_club) >= 3000 then raise exception 'too_many_scores'; end if;
   insert into public.scores (club_id, player, mode, kind, n, score, max, seconds)

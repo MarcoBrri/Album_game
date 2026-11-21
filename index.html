@@ -130,6 +130,11 @@ details.sedwrap{border-top:1px solid var(--line);padding-top:10px}
 .pagehead{display:flex;align-items:center;gap:10px;margin:0 0 12px}.pagehead h2{margin:0;font-size:20px}
 .adminbox{margin-top:22px}.adminrow{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .sharebtn{width:100%;margin:6px 0 4px}
+.collect{text-align:center;margin:4px 0 16px}.collect h2{margin:6px 0}
+.switch{display:flex;align-items:center;gap:10px;margin:10px 0 4px;font-size:15px;cursor:pointer}
+.switch input{appearance:none;-webkit-appearance:none;width:44px;height:26px;border-radius:999px;background:var(--line);position:relative;flex:none;cursor:pointer;transition:background .15s}
+.switch input::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:left .15s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.switch input:checked{background:var(--accent)}.switch input:checked::after{left:21px}
 </style>
 </head>
 <body>
@@ -282,6 +287,7 @@ async function route(){
   lastHash = location.hash;
   // Stessa directory: cambia solo pagina, senza ricaricare i dati
   if (slug && state.company && slug===state.slug){
+    if (view!=="home" && !gameOpen()){ history.replaceState(null, "", location.pathname + "#" + slug); lastHash = location.hash; state.view = "home"; render(); return; }
     if (view==="game" && state.view!=="game") game.reset();
     state.view = view; render(); window.scrollTo(0, 0);
     return;
@@ -298,12 +304,13 @@ async function route(){
     if (my !== routeToken) return;
     const club = !error && data && data[0];
     if (!club){ state.slug = null; state.notFound = true; state.loaded = true; render(); return; }
-    state.company = { id: club.id, name: club.name, fields: Array.isArray(club.fields) ? club.fields : [], useNick: club.use_nick !== false };
+    state.company = { id: club.id, name: club.name, fields: Array.isArray(club.fields) ? club.fields : [], useNick: club.use_nick !== false, gameOn: club.game_enabled !== false, members: club.members || 0 };
     if (state.session){
       const own = await sb.from("clubs").select("id").eq("slug", slug).maybeSingle();   // le regole di sicurezza restituiscono la riga solo al proprietario
       if (my !== routeToken) return;
       state.admin = !!(own && own.data);
     }
+    if (view!=="home" && !gameOpen()){ history.replaceState(null, "", location.pathname + "#" + slug); lastHash = location.hash; state.view = "home"; }
     await loadPeople();
   } catch(e){
     if (my !== routeToken) return;
@@ -354,6 +361,12 @@ async function createCompany(name, struct){
   const { error } = await sb.from("clubs").insert({ name, slug, fields: struct.fields, use_nick: struct.useNick });
   if (error) throw error;
   location.hash = slug;
+}
+const gameOpen = () => !!(state.company && (state.company.gameOn || state.admin));
+async function setGameOn(on){
+  const { error } = await sb.from("clubs").update({ game_enabled: on }).eq("id", state.company.id);
+  if (error) throw error;
+  state.company.gameOn = on;
 }
 async function saveStructure(struct){
   const { error } = await sb.from("clubs").update({ fields: struct.fields, use_nick: struct.useNick }).eq("id", state.company.id);
@@ -699,6 +712,17 @@ function clubHome(){
   const n = state.people.filter(isApproved).length;
   const pend = admin ? state.people.filter(p=>!isApproved(p)).length : 0;
   const tile = (icon, label, fn) => h("button",{class:"tile",onclick:fn}, h("span",{class:"ti","aria-hidden":"true"}, icon), h("span",{}, label));
+  if (!gameOpen()){                       // modalità «raccolta schede»: solo Aggiungi
+    const m = state.company.members;
+    return h("div",{class:"clubhome"},
+      h("div",{class:"collect"},
+        h("div",{class:"ti","aria-hidden":"true",style:"font-size:40px"},"📸"),
+        h("h2",{},"Stiamo costruendo l'album!"),
+        h("p",{class:"role"},"Prima di giocare servono le schede di tutti. Aggiungi la tua (e quella di chi conosci): il gioco si aprirà presto."),
+        m ? h("p",{class:"role"}, "Già " + m + (m===1 ? " persona" : " persone") + " nell'album.") : null),
+      h("button",{class:"btn primary playnow",onclick:()=>openForm(null)}, "➕  Aggiungi una persona"),
+      h("div",{style:"text-align:center;margin-top:14px"}, h("button",{class:"linkbtn",type:"button",onclick:showPrivacy,style:"align-self:center"},"Privacy")));
+  }
   const wrap = h("div",{class:"clubhome"},
     h("button",{class:"btn primary playnow",onclick:()=>navTo("game")}, "▶  Gioca ora"),
     h("div",{class:"role",style:"text-align:center;margin:8px 0 18px"},
@@ -715,8 +739,17 @@ function clubHome(){
       if (!armed){ armed = true; cl.textContent = "Conferma: il vecchio link smetterà di funzionare"; setTimeout(()=>{ armed=false; cl.textContent="Cambia link"; }, 5000); return; }
       cl.disabled = true; try { await changeLink(); } catch(e){ cl.textContent = "Errore, riprova"; cl.disabled = false; armed = false; }
     };
+    const on = state.company.gameOn;
+    const tg = h("input",{type:"checkbox",checked:on,role:"switch"});
+    tg.addEventListener("change", async () => {
+      tg.disabled = true;
+      try { await setGameOn(tg.checked); render(); } catch(e){ tg.checked = !tg.checked; tg.disabled = false; alertEl.textContent = "Modifica non riuscita. Riprova."; }
+    });
+    const alertEl = h("div",{class:"err",role:"alert"});
+    wrap.prepend(on ? "" : h("div",{class:"note box",style:"margin-bottom:12px"}, "Gioco disattivato: i visitatori vedono solo «Aggiungi una persona». Tu vedi tutto."));
     wrap.append(h("div",{class:"note box adminbox"},
       h("strong",{},"Amministrazione"),
+      h("label",{class:"switch"}, tg, h("span",{}, on ? "Gioco attivo: i visitatori vedono tutti i pulsanti" : "Gioco disattivato: i visitatori possono solo aggiungere persone")), alertEl,
       h("div",{class:"adminrow"},
         h("button",{class:"btn small" + (pend ? " primary" : ""),onclick:()=>navTo("dir")}, "Da approvare (" + pend + ")"),
         h("button",{class:"btn small",onclick:openStructure},"Modifica la scheda"),
