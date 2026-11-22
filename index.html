@@ -307,8 +307,8 @@ async function loadPeople(){
   state.people = rows.map(fromRow); state.loaded = true; render();
 }
 
-const SUBPAGES = { gioca:"game", classifica:"board", elenco:"dir" };
-const PAGE_OF = { game:"gioca", board:"classifica", dir:"elenco" };
+const SUBPAGES = { gioca:"game", classifica:"board", album:"dir", elenco:"dir" };
+const PAGE_OF = { game:"gioca", board:"classifica", dir:"album" };
 let lastHash = location.hash;
 function navTo(view){ location.hash = state.slug + (PAGE_OF[view] ? "/" + PAGE_OF[view] : ""); }
 async function route(){
@@ -475,7 +475,7 @@ function render(){
   else if (!state.slug) main.replaceChildren(homeView());
   else if (!state.company) main.replaceChildren(h("div",{class:"empty"}, state.loadError ? "Non riesco a caricare i dati. Controlla la connessione e ricarica la pagina." : "Caricamento…"));
   else if (state.view==="home") main.replaceChildren(clubHome());
-  else main.replaceChildren(pageHead(state.view==="dir" ? "Elenco" : state.view==="board" ? "Classifica" : "Gioca"),
+  else main.replaceChildren(pageHead(state.view==="dir" ? "Album" : state.view==="board" ? "Classifica" : "Gioca"),
     state.view==="dir" ? dirView() : state.view==="board" ? boardView() : gameView());
 }
 
@@ -733,7 +733,7 @@ function openShare(){
   };
   const ov = h("div",{class:"overlay"}, h("div",{class:"modal",role:"dialog","aria-modal":"true","aria-label":"Condividi il link"},
     h("h2",{},"Condividi il link"),
-    h("p",{class:"role",style:"margin:0 0 6px"}, "Manda questo link ai membri del gruppo: con il link si gioca, si consulta l'elenco e si possono proporre nuove persone (pubblicate dopo l'approvazione dell'amministratore)."),
+    h("p",{class:"role",style:"margin:0 0 6px"}, "Manda questo link ai membri del gruppo: con il link si gioca, si sfoglia l'album e si possono proporre nuove persone (pubblicate dopo l'approvazione dell'amministratore)."),
     sh, h("div",{class:"linkrow"}, inp, cp),
     h("p",{class:"role",style:"margin:6px 0 0"}, "Condividilo solo con i membri: chi ha il link vede foto e nomi. ",
       h("button",{class:"linkbtn",type:"button",onclick:showPrivacy},"Privacy")),
@@ -769,7 +769,7 @@ function clubHome(){
     h("div",{class:"tiles"},
       tile("🏆","Classifica",()=>navTo("board")),
       tile("➕","Aggiungi una persona",()=>openForm(null)),
-      tile("📖","Elenco",()=>navTo("dir")),
+      tile("📖","Album",()=>navTo("dir")),
       tile("🔗","Condividi il link",openShare)),
     h("div",{style:"text-align:center;margin-top:14px"}, h("button",{class:"linkbtn",type:"button",onclick:showPrivacy,style:"align-self:center"},"Privacy")));
   if (admin){
@@ -892,7 +892,7 @@ function openForm(person){
   });
   const lg = h("input",{type:"checkbox",checked:!!(person && person.legend)});
   const lgNote = h("input",{type:"text",maxlength:"80",value:person ? person.legendNote||"" : "",placeholder:"Es. Fondatore del club, 1978","aria-label":"Motivazione"});
-  const lgNoteBox = h("div",{style:"margin-top:8px;display:" + (lg.checked ? "block" : "none")}, h("div",{class:"role",style:"margin-bottom:4px"},"Motivazione (facoltativa, visibile nell'elenco)"), lgNote);
+  const lgNoteBox = h("div",{style:"margin-top:8px;display:" + (lg.checked ? "block" : "none")}, h("div",{class:"role",style:"margin-bottom:4px"},"Motivazione (facoltativa, visibile nell'album)"), lgNote);
   lg.addEventListener("change", () => { lgNoteBox.style.display = lg.checked ? "block" : "none"; });
   const save = h("button",{class:"btn primary"},"Salva");
   const close = () => modal.replaceChildren();
@@ -1087,7 +1087,7 @@ function setupView(wrap){
     h("h2",{},"Nuova partita"),
     h("div",{class:"role",style:"text-align:left"},"Tipo di gioco"),
     h("div",{class:"choicecol"}, MODES.map(m => h("button",{class:"btn","aria-pressed":game.mode===m.id,onclick:()=>{game.mode=m.id;render();}}, m.label))),
-    !enough ? h("div",{class:"empty"}, "Per questo gioco servono almeno " + cfg.min + " persone con foto. Ora ce ne sono " + pool.length + ". Aggiungi o approva qualche profilo con foto dall'Elenco!") : [
+    !enough ? h("div",{class:"empty"}, "Per questo gioco servono almeno " + cfg.min + " persone con foto. Ora ce ne sono " + pool.length + ". Aggiungi o approva qualche profilo con foto dall'Album!") : [
       h("div",{class:"role",style:"text-align:left;margin-top:12px"},"Numero di domande"),
       h("div",{class:"choicerow"}, KINDS.map(k => {
         const disabled = k.id!=="all" && +k.id > game.available(k.id);
