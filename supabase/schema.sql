@@ -102,6 +102,8 @@ create table if not exists public.people (
   data       jsonb not null default '{}'::jsonb constraint people_data_size check (char_length(data::text) <= 4000),
   photo      text not null default '' check (char_length(photo) <= 150000),
   status     text not null default 'pending' check (status in ('pending','approved')),
+  legend     boolean not null default false,
+  legend_note text not null default '' check (char_length(legend_note) <= 80),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -137,10 +139,11 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 -- Solo persone approvate, e solo se il gioco è attivo
-create or replace function public.club_members(p_slug text)
-returns table (id uuid, name text, nick text, data jsonb, photo text)
+drop function if exists public.club_members(text);
+create function public.club_members(p_slug text)
+returns table (id uuid, name text, nick text, data jsonb, photo text, legend boolean, legend_note text)
 language sql stable security definer set search_path = public as $$
-  select p.id, p.name, p.nick, p.data, p.photo
+  select p.id, p.name, p.nick, p.data, p.photo, p.legend, p.legend_note
   from public.people p join public.clubs c on c.id = p.club_id
   where c.slug = p_slug and p.status = 'approved' and c.game_enabled
   order by p.name;

@@ -131,6 +131,18 @@ details.sedwrap{border-top:1px solid var(--line);padding-top:10px}
 .adminbox{margin-top:22px}.adminrow{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .sharebtn{width:100%;margin:6px 0 4px}
 .hint{font-weight:400;color:var(--muted);font-size:13px}
+.legend{position:relative;border:3px solid transparent !important;background:linear-gradient(var(--surface),var(--surface)) padding-box,linear-gradient(135deg,#8a6d0b,#f7d774 25%,#b8860b 50%,#fff1a8 70%,#9c7a12) border-box !important;box-shadow:0 0 0 1px rgba(138,109,11,.35),0 0 16px rgba(240,190,40,.45) !important}
+.photo.legend{background:linear-gradient(var(--accent-soft),var(--accent-soft)) padding-box,linear-gradient(135deg,#8a6d0b,#f7d774 25%,#b8860b 50%,#fff1a8 70%,#9c7a12) border-box !important}
+.card.legend{overflow:hidden}
+.spk{position:absolute;z-index:2;pointer-events:none;transform:translate(-50%,-50%) scale(.2);opacity:0;background:radial-gradient(circle,#fff 0 18%,#ffe680 40%,#e0a800 75%);clip-path:polygon(50% 0,60% 40%,100% 50%,60% 60%,50% 100%,40% 60%,0 50%,40% 40%);filter:drop-shadow(0 0 2px #b8860b);animation:twinkle 2.6s ease-in-out infinite}
+@keyframes twinkle{0%,100%{opacity:0;transform:translate(-50%,-50%) scale(.2) rotate(0)}45%{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(45deg)}60%{opacity:.9}}
+@media (prefers-reduced-motion:reduce){.spk{animation:none;opacity:.85;transform:translate(-50%,-50%) scale(.8)}}
+.legendbadge{position:absolute;top:8px;left:8px;z-index:3;background:linear-gradient(135deg,#b8860b,#f7d774);color:#3b2c00;font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+.legendnote{font-size:13px;font-style:italic;color:#9c7a12;margin-top:2px}
+@media (prefers-color-scheme:dark){.legendnote{color:#f0c94a}}
+.legendmsg{font-weight:700;color:#9c7a12;margin-bottom:6px}
+@media (prefers-color-scheme:dark){.legendmsg{color:#f0c94a}}
+.checkline{display:flex;align-items:flex-start;gap:8px;font-weight:600;cursor:pointer}.checkline input{margin-top:3px}
 .field.missing{outline:2px solid var(--bad);outline-offset:4px;border-radius:8px}
 .collect{text-align:center;margin:4px 0 16px}.collect h2{margin:6px 0}
 .switch{display:flex;align-items:center;gap:10px;margin:10px 0 4px;font-size:15px;cursor:pointer}
@@ -250,6 +262,15 @@ function fieldInput(f, initial){
 const choiceHint = f => f.type==="multi" ? "(Più risposte possibili)" : f.type==="single" ? "(Una risposta possibile)" : "";
 const fieldLabel = f => h("label",{}, f.label, choiceHint(f) ? h("span",{class:"hint"}, " " + choiceHint(f)) : null);
 const sortName = (a,b) => (a.name||"").localeCompare(b.name||"", "it", {sensitivity:"base"});
+// Figurina «Legend»: cornice oro con puntini brillanti
+const SPARKS = [[10,8,16,0],[84,6,12,.7],[93,38,18,1.4],[72,90,14,.4],[16,78,16,1.1],[48,4,11,1.8],[5,46,12,2.1],[91,74,11,.9],[40,94,15,1.6],[62,28,10,2.4],[28,30,12,.3],[78,56,13,1.9]];
+function legendize(el){
+  if (!el || el.classList.contains("legend")) return el;
+  el.classList.add("legend");
+  for (const [x,y,sz,d] of SPARKS) el.append(h("span",{class:"spk","aria-hidden":"true",style:"left:"+x+"%;top:"+y+"%;width:"+sz+"px;height:"+sz+"px;animation-delay:"+d+"s"}));
+  return el;
+}
+const legendBadge = () => h("span",{class:"legendbadge"},"★ Legend");
 function photoEl(p){
   const box = h("div", {class:"photo"});
   if (p.photo){ const img = h("img", {src:p.photo, alt:"", loading:"lazy"}); box.append(img); }
@@ -263,7 +284,7 @@ const SLUG_RE = /^[a-z0-9][a-z0-9-]{2,60}$/;
 const state = { recovery:false, people: [], loaded:false, admin:false, shared:true, view:"dir", q:"", slug:null, company:null, notFound:false, session:null, authMsg:"", configMissing:false };
 let sb = null, routeToken = 0;
 const isAdmin = () => !!state.admin;
-const fromRow = r => ({ id:r.id, name:r.name, nick:r.nick||"", data:(r.data && typeof r.data==="object") ? r.data : {}, photo:r.photo||"", approved: r.status ? r.status==="approved" : true });
+const fromRow = r => ({ id:r.id, name:r.name, nick:r.nick||"", data:(r.data && typeof r.data==="object") ? r.data : {}, photo:r.photo||"", legend:!!r.legend, legendNote:r.legend_note||"", approved: r.status ? r.status==="approved" : true });
 
 function slugify(name){
   const base = name.normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase()
@@ -277,7 +298,7 @@ async function loadPeople(){
   if (!state.company) return;
   let rows = [];
   if (state.admin){
-    const { data, error } = await sb.from("people").select("id,name,nick,data,photo,status").eq("club_id", state.company.id).order("name");
+    const { data, error } = await sb.from("people").select("id,name,nick,data,photo,status,legend,legend_note").eq("club_id", state.company.id).order("name");
     if (error) throw error; rows = data || [];
   } else {
     const { data, error } = await sb.rpc("club_members", { p_slug: state.slug });
@@ -397,6 +418,7 @@ async function savePerson(id, d){
     if (error) throw error; return;
   }
   row.updated_at = new Date().toISOString();
+  if (d.legend !== undefined){ row.legend = !!d.legend; row.legend_note = d.legend ? (d.legendNote||"").trim().slice(0,80) : ""; }
   const res = id ? await sb.from("people").update(row).eq("id", id)
                  : await sb.from("people").insert(Object.assign({club_id: state.company.id}, row));
   if (res.error) throw res.error;
@@ -654,7 +676,7 @@ async function backupSql(){
   const cid = state.company.id;
   const [c, p, sc] = await Promise.all([
     sb.from("clubs").select("id,slug,name,fields,use_nick,created_at").eq("id", cid).maybeSingle(),
-    sb.from("people").select("id,name,nick,data,photo,status,created_at,updated_at").eq("club_id", cid).order("name"),
+    sb.from("people").select("id,name,nick,data,photo,status,legend,legend_note,created_at,updated_at").eq("club_id", cid).order("name"),
     sb.from("scores").select("id,player,mode,kind,n,score,max,seconds,created_at").eq("club_id", cid)]);
   for (const r of [c,p,sc]) if (r.error) throw r.error;
   const q = v => v == null ? "null" : "'" + String(v).replace(/'/g, "''") + "'";
@@ -668,8 +690,8 @@ async function backupSql(){
   L.push("begin;");
   L.push("insert into public.clubs (id, slug, name, fields, use_nick, owner_id, created_at) values (" + [q(club.id), q(club.slug), q(club.name), j(club.fields), club.use_nick ? "true" : "false",
     "(select id from auth.users where lower(email) = lower(" + q(email) + "))", q(club.created_at)].join(", ") + ") on conflict (id) do nothing;");
-  for (const r of p.data) L.push("insert into public.people (id, club_id, name, nick, data, photo, status, created_at, updated_at) values (" +
-    [q(r.id), q(club.id), q(r.name), q(r.nick), j(r.data), q(r.photo), q(r.status), q(r.created_at), q(r.updated_at)].join(", ") + ") on conflict (id) do nothing;");
+  for (const r of p.data) L.push("insert into public.people (id, club_id, name, nick, data, photo, status, legend, legend_note, created_at, updated_at) values (" +
+    [q(r.id), q(club.id), q(r.name), q(r.nick), j(r.data), q(r.photo), q(r.status), r.legend ? "true" : "false", q(r.legend_note||""), q(r.created_at), q(r.updated_at)].join(", ") + ") on conflict (id) do nothing;");
   for (const r of sc.data) L.push("insert into public.scores (id, club_id, player, mode, kind, n, score, max, seconds, created_at) values (" +
     [q(r.id), q(club.id), q(r.player), q(r.mode), q(r.kind), r.n, r.score, r.max, r.seconds, q(r.created_at)].join(", ") + ") on conflict (id) do nothing;");
   L.push("commit;");
@@ -781,13 +803,16 @@ const isApproved = p => p.approved !== false;
 const stripId = p => { const o = Object.assign({}, p); delete o.id; return o; };
 function personCard(p, actions){
   const d = detailBits(p);
-  return h("div",{class:"card"},
+  const card = h("div",{class:"card"},
+    p.legend ? legendBadge() : null,
     photoEl(p),
     h("div",{class:"info"},
       h("div",{class:"name"}, p.name||"—"),
+      p.legend && p.legendNote ? h("div",{class:"legendnote"}, p.legendNote) : null,
       p.nick ? h("div",{class:"nick"}, "«" + p.nick + "»") : null,
       h("div",{class:"chips"}, d.chips), d.texts),
     actions ? h("div",{class:"cardact"}, actions) : null);
+  return p.legend ? legendize(card) : card;
 }
 function pendingPanel(list){
   const grid = h("div",{class:"grid"});
@@ -799,7 +824,7 @@ function pendingPanel(list){
       try { await removePerson(p.id); } catch(e){ rej.textContent = "Errore"; }
     };
     const ok = h("button",{class:"btn primary"},"Approva");
-    ok.onclick = async () => { ok.disabled = true; try { await savePerson(p.id, Object.assign(stripId(p), {approved:true})); } catch(e){ ok.disabled = false; ok.textContent = "Errore"; } };
+    ok.onclick = async () => { ok.disabled = true; try { await savePerson(p.id, Object.assign(stripId(p), {approved:true, legend:p.legend, legendNote:p.legendNote})); } catch(e){ ok.disabled = false; ok.textContent = "Errore"; } };
     grid.append(personCard(p, [ok, h("button",{class:"btn",onclick:()=>openForm(p)},"Modifica"), rej]));
   }
   return h("div",{class:"pending"},
@@ -864,6 +889,10 @@ function openForm(person){
     try { photo = await fileToSquareJpeg(file.files[0]); drawPic(); }
     catch(e){ err.textContent = "Non riesco a leggere questa immagine."; }
   });
+  const lg = h("input",{type:"checkbox",checked:!!(person && person.legend)});
+  const lgNote = h("input",{type:"text",maxlength:"80",value:person ? person.legendNote||"" : "",placeholder:"Es. Fondatore del club, 1978","aria-label":"Motivazione"});
+  const lgNoteBox = h("div",{style:"margin-top:8px;display:" + (lg.checked ? "block" : "none")}, h("div",{class:"role",style:"margin-bottom:4px"},"Motivazione (facoltativa, visibile nell'elenco)"), lgNote);
+  lg.addEventListener("change", () => { lgNoteBox.style.display = lg.checked ? "block" : "none"; });
   const save = h("button",{class:"btn primary"},"Salva");
   const close = () => modal.replaceChildren();
   let delArmed = false;
@@ -878,7 +907,8 @@ function openForm(person){
     save.disabled = true; save.textContent = "Salvo…";
     try {
       const data = {}; fs.forEach((f,i) => { const v = inputs[i].get(); if (f.type==="text" ? v : v.length) data[f.id] = v; });
-      await savePerson(id, {name:name.value.trim(), nick:useNick ? nick.value.trim() : "", data, photo, approved: person ? isApproved(person) : admin, updated:Date.now()});
+      const extra = admin ? {legend:lg.checked, legendNote:lgNote.value} : {};
+      await savePerson(id, Object.assign({name:name.value.trim(), nick:useNick ? nick.value.trim() : "", data, photo, approved: person ? isApproved(person) : admin, updated:Date.now()}, extra));
       if (!admin && !person) { thanks(); } else close();
     } catch(e){
       err.textContent = "Salvataggio non riuscito. Riprova tra poco.";
@@ -894,6 +924,7 @@ function openForm(person){
     h("div",{class:"field"}, h("label",{},"Nome e cognome"), name),
     useNick ? h("div",{class:"field"}, h("label",{},"Soprannome"), nick) : null,
     fs.map((f,i) => h("div",{class:"field"}, fieldLabel(f), inputs[i].el)),
+    admin ? h("div",{class:"field legendopt"}, h("label",{class:"checkline"}, lg, h("span",{}, "★ Legend", h("span",{class:"hint"}," · figurina speciale con cornice d'oro, punti doppi nei giochi"))), lgNoteBox) : null,
     err,
     h("div",{class:"actions"}, del, h("button",{class:"btn",onclick:close},"Annulla"), save));
   function thanks(){
@@ -1010,10 +1041,18 @@ const game = {
   reset(){ this.phase="setup"; this.rounds=[]; this.i=0; this.score=0; this.max=0; this.answered=false; this.tEnd=0; this.saved=false; },
   inProgress(){ return this.phase==="play" && this.i < this.rounds.length && (this.i>0 || this.answered); },
   pool(){ return state.people.filter(p=>p.photo && p.name && p.approved !== false); },
+  legendCap(kind){ return kind==="10" ? 1 : kind==="20" ? 2 : Infinity; },
+  // Quante domande si possono fare con questo numero, rispettando il limite di Legend
+  available(kind){ const pool = this.pool(), L = pool.filter(p=>p.legend).length; return pool.length - L + Math.min(L, this.legendCap(kind)); },
   start(){
-    const pool = this.pool();
-    const n = this.kind==="all" ? pool.length : Math.min(+this.kind, pool.length);
-    const picks = shuffle(pool).slice(0, n);          // «Completo»: tutte le persone, in ordine casuale
+    const pool = this.pool(), cap = this.legendCap(this.kind);
+    const n = this.kind==="all" ? pool.length : Math.min(+this.kind, this.available(this.kind));
+    const picks = []; let L = 0;                      // «Completo»: tutte le persone, in ordine casuale
+    for (const p of shuffle(pool)){
+      if (picks.length >= n) break;
+      if (p.legend){ if (L >= cap) continue; L++; }
+      picks.push(p);
+    }
     this.rounds = picks.map(p => ({ target:p, options: shuffle([p, ...shuffle(pool.filter(x=>x.id!==p.id)).slice(0,3)]) }));
     this.i = 0; this.score = 0; this.max = 0; this.answered = false; this.tEnd = 0; this.saved = false;
     this.phase = "play"; this.t0 = Date.now();
@@ -1040,7 +1079,7 @@ function setupView(wrap){
   const pool = game.pool();
   const cfg = MODES.find(m=>m.id===game.mode);
   const enough = pool.length >= cfg.min;
-  if (game.kind !== "all" && +game.kind > pool.length) game.kind = "all";
+  if (game.kind !== "all" && +game.kind > game.available(game.kind)) game.kind = "all";
   const nq = game.kind==="all" ? pool.length : +game.kind;
   wrap.append(h("div",{class:"q setup"},
     h("h2",{},"Nuova partita"),
@@ -1049,7 +1088,7 @@ function setupView(wrap){
     !enough ? h("div",{class:"empty"}, "Per questo gioco servono almeno " + cfg.min + " persone con foto. Ora ce ne sono " + pool.length + ". Aggiungi o approva qualche profilo con foto dall'Elenco!") : [
       h("div",{class:"role",style:"text-align:left;margin-top:12px"},"Numero di domande"),
       h("div",{class:"choicerow"}, KINDS.map(k => {
-        const disabled = k.id!=="all" && +k.id > pool.length;
+        const disabled = k.id!=="all" && +k.id > game.available(k.id);
         return h("button",{class:"btn","aria-pressed":game.kind===k.id,disabled,onclick:()=>{game.kind=k.id;render();}},
           k.id==="all" ? "Completo (" + pool.length + ")" : k.label);
       })),
@@ -1102,9 +1141,13 @@ function gameView(){
   const r = game.rounds[game.i], t = r.target;
   const fb = h("div",{class:"fb"});
   const next = h("button",{class:"btn primary",onclick:()=>{game.i++;game.answered=false;render();}}, game.i+1<game.rounds.length ? "Avanti" : "Vedi il risultato");
+  const mult = t.legend ? 2 : 1;
+  let qPhoto = null, legendTargets = [];
+  const legendMsg = () => t.legend ? h("div",{class:"legendmsg"}, "✨ Era una Legend! Punti doppi", t.legendNote ? h("div",{class:"role"}, t.legendNote) : null) : null;
   const finish = (pts, max, ...nodes) => {
     if (game.answered) return; game.answered = true; game.score += pts; game.max += max;
-    fb.replaceChildren(...nodes.filter(Boolean), next); next.focus();
+    if (t.legend) legendTargets.concat(qPhoto ? [qPhoto] : []).forEach(legendize);
+    fb.replaceChildren(legendMsg() || "", ...nodes.filter(Boolean), next); next.focus();
     if (fb.scrollIntoView) fb.scrollIntoView({block:"nearest",behavior:"smooth"});
   };
   let body;
@@ -1116,7 +1159,10 @@ function gameView(){
       if (game.answered) return;
       optEls.forEach(([q,e]) => { e.disabled = true; if (q.id===t.id) e.classList.add("ok"); else if (e===el) e.classList.add("bad"); });
       const ok = p.id===t.id;
-      finish(ok ? 1 : 0, 1, h("strong",{class:ok?"okt":"badt"}, ok ? "Esatto!" : "Era " + fullLabel(t)), revealCard(t, game.mode==="name"));
+      optEls.forEach(([q,e]) => { if (q.id===t.id && game.mode==="name") legendTargets.push(e); });
+      const rc = revealCard(t, game.mode==="name");
+      const small = rc.querySelector(".photo.small"); if (small) legendTargets.push(small);
+      finish(ok ? mult : 0, mult, h("strong",{class:ok?"okt":"badt"}, ok ? (mult>1 ? "Esatto! +2" : "Esatto!") : "Era " + fullLabel(t)), rc);
     };
     for (const p of r.options){
       const el = game.mode==="photo"
@@ -1125,7 +1171,8 @@ function gameView(){
       el.addEventListener("click", ()=>answer(p, el));
       optEls.push([p, el]); opts.append(el);
     }
-    body = [game.mode==="photo" ? [photoEl(t), h("h2",{},"Chi è questa persona?")] : h("h2",{}, "Qual è la foto di " + fullLabel(t) + "?"), opts];
+    if (game.mode==="photo") qPhoto = photoEl(t);
+    body = [game.mode==="photo" ? [qPhoto, h("h2",{},"Chi è questa persona?")] : h("h2",{}, "Qual è la foto di " + fullLabel(t) + "?"), opts];
 
   } else { // hard: compila tutta la scheda
     const name = h("input",{type:"text",maxlength:"80",autocomplete:"off","aria-label":"Nome e cognome"});
@@ -1156,8 +1203,8 @@ function gameView(){
           h("div",{class:"rt"}, c==="ok" ? x.right : [h("div",{}, "Tu: ", x.yours), h("div",{class:"ans"}, "Giusto: ", x.right)]),
           h("div",{class:"rp"}, markIcon(c) + " " + fmt(x.pts) + "/" + fmt(x.max)));
       }));
-      finish(pts, max,
-        h("strong",{class:mark(pts,max)==="ok"?"okt":""}, "Questa scheda: " + fmt(pts) + " / " + fmt(max)),
+      finish(pts*mult, max*mult,
+        h("strong",{class:mark(pts,max)==="ok"?"okt":""}, "Questa scheda: " + fmt(pts*mult) + " / " + fmt(max*mult) + (mult>1 ? " (punti doppi)" : "")),
         table,
         h("div",{class:"role",style:"margin-top:6px"},"Nome, soprannome e testi: 1 punto (0,5 se quasi giusto) · Scelte: 1 punto se esatte · Scelte con dettagli: 0,5 + 0,5 per il dettaglio"));
     };
@@ -1167,7 +1214,8 @@ function gameView(){
     inputs.forEach(x => { if (x.main) x.main.addEventListener("keydown", e => { if (e.key==="Enter") submit(); }); });
     const fieldBoxes = fs.map((f,i) => h("div",{class:"field"}, fieldLabel(f), inputs[i].el));
     fieldBoxes.forEach(b => b.addEventListener("change", () => { b.classList.remove("missing"); need.textContent = ""; }));
-    body = [photoEl(t), h("h2",{},"Compila la scheda di questa persona"),
+    qPhoto = photoEl(t);
+    body = [qPhoto, h("h2",{},"Compila la scheda di questa persona"),
       h("div",{class:"hardform"},
         h("div",{class:"field"}, h("label",{},"Nome e cognome"), name),
         useNick ? h("div",{class:"field"}, h("label",{},"Soprannome (se ne ha uno)"), nick) : null,
