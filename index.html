@@ -226,7 +226,7 @@ function fieldInput(f, initial){
     const box = h("input",{type:single?"radio":"checkbox",name:single?gname:null,value:o.id,checked:ids.includes(o.id)});
     const subBoxes = arr(o.sub).map(s => h("input",{type:"checkbox",value:s.id,checked:ids.includes(s.id)}));
     const panel = subBoxes.length ? h("div",{class:"companel",style:"display:none"},
-      h("div",{class:"role",style:"margin-bottom:4px"}, "Per «" + o.label + "»" + (subBoxes.length > 1 ? " · puoi sceglierne più di una" : "")),
+      h("div",{class:"role",style:"margin-bottom:4px"}, "Per «" + o.label + "»" + (subBoxes.length > 1 ? " (Più risposte possibili)" : "")),
       h("div",{class:"checks col"}, o.sub.map((s,i) => h("label",{}, subBoxes[i], s.label)))) : null;
     return {o, box, subBoxes, panel};
   });
@@ -247,8 +247,8 @@ function fieldInput(f, initial){
   };
 }
 // Indicazione breve sotto il nome del campo
-const choiceHint = f => f.type==="multi" ? "Puoi sceglierne più di una" : f.type==="single" ? "Una sola risposta" : "";
-const fieldLabel = f => h("label",{}, f.label, choiceHint(f) ? h("span",{class:"hint"}, " · " + choiceHint(f)) : null);
+const choiceHint = f => f.type==="multi" ? "(Più risposte possibili)" : f.type==="single" ? "(Una risposta possibile)" : "";
+const fieldLabel = f => h("label",{}, f.label, choiceHint(f) ? h("span",{class:"hint"}, " " + choiceHint(f)) : null);
 const sortName = (a,b) => (a.name||"").localeCompare(b.name||"", "it", {sensitivity:"base"});
 function photoEl(p){
   const box = h("div", {class:"photo"});
