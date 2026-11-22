@@ -904,7 +904,7 @@ function openForm(person){
 
   save.onclick = async () => {
     err.textContent = "";
-    if (!photo){ err.textContent = "Aggiungi una foto: serve per il gioco."; picWrap.classList.add("missing"); return; }
+    if (!photo){ err.textContent = "Aggiungi una foto."; picWrap.classList.add("missing"); return; }
     if (!name.value.trim()){ err.textContent = "Inserisci nome e cognome."; return; }
     save.disabled = true; save.textContent = "Salvo…";
     try {
