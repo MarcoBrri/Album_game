@@ -96,6 +96,16 @@ nav[hidden]{display:none}
 .choicecol{display:flex;flex-direction:column;gap:6px;margin-top:6px}.choicerow{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-start;margin-top:6px}
 .choicecol .btn,.choicerow .btn{text-align:left}.choicerow .btn{flex:1 1 auto;text-align:center}
 .btn[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
+.steplabel{text-align:left;font-weight:700;font-size:15px;margin:4px 0 8px}
+.levels{display:flex;flex-direction:column;gap:10px}
+.level{--lv:#2e8b57;--lvbg:#e6f4ec;position:relative;display:grid;grid-template-columns:1fr auto;grid-template-areas:"tag check" "title check" "desc check";text-align:left;gap:2px 10px;padding:12px 14px;border-radius:14px;border:2px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;cursor:pointer}
+.level.mid{--lv:#c77700;--lvbg:#fdf0dc}.level.hard{--lv:#c0392b;--lvbg:#fbe5e2}
+.lvtag{grid-area:tag;justify-self:start;background:var(--lv);color:#fff;font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:2px 9px;border-radius:999px}
+.lvtitle{grid-area:title;font-size:18px;font-weight:700;margin-top:4px}.lvdesc{grid-area:desc;font-size:14px;color:var(--muted)}
+.lvcheck{grid-area:check;align-self:center;width:28px;height:28px;border-radius:50%;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff}
+.level[aria-checked=true]{border-color:var(--lv);background:var(--lvbg);box-shadow:0 0 0 3px color-mix(in srgb,var(--lv) 25%,transparent)}
+.level[aria-checked=true] .lvcheck{background:var(--lv);border-color:var(--lv)}
+@media (prefers-color-scheme:dark){.level{--lvbg:color-mix(in srgb,var(--lv) 18%,var(--surface))}.level.mid,.level.hard{--lvbg:color-mix(in srgb,var(--lv) 18%,var(--surface))}}
 .savebox{margin-top:10px;display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap}.savebox.col{flex-direction:column;align-items:stretch}
 .lb{display:grid;grid-template-columns:36px 1fr auto auto;gap:10px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:6px}
 .lb .pos{font-size:20px;text-align:center}.lb .pct{font-weight:700;color:var(--accent)}
@@ -227,7 +237,7 @@ function detailBits(p){
     texts: fs.filter(f => textOf(f,p)).map(f => h("div",{class:"role ftext"}, f.label + ": " + textOf(f,p)))
   };
 }
-// Controlli per compilare un campo (usato dal modulo e dal gioco «Super hard»)
+// Controlli per compilare un campo (usato dal modulo e dal gioco «Super Hard»)
 function fieldInput(f, initial){
   if (f.type==="text"){
     const inp = h("input",{type:"text",maxlength:"100",value:typeof initial==="string"?initial:"",autocomplete:"off","aria-label":f.label});
@@ -945,9 +955,9 @@ function openForm(person){
 
 /* ---------- game ---------- */
 const MODES = [
-  {id:"photo", label:"Foto → Nome", min:4, rounds:10},
-  {id:"name",  label:"Nome → Foto", min:4, rounds:10},
-  {id:"hard",  label:"Super hard: compila la scheda", min:1, rounds:5}
+  {id:"photo", level:"Facile",     tag:"easy", label:"Foto → Nome",     desc:"Vedi una foto e scegli il nome giusto tra quattro.", min:4, rounds:10},
+  {id:"name",  level:"Medio",      tag:"mid",  label:"Nome → Foto",     desc:"Leggi un nome e trova la sua foto tra quattro.", min:4, rounds:10},
+  {id:"hard",  level:"Super Hard", tag:"hard", label:"Scheda completa", desc:"Vedi una foto e compila tutta la scheda: nome e informazioni.", min:1, rounds:5}
 ];
 const fmt = n => String(Math.round(n*10)/10).replace(".", ",");
 const norm = s => (s||"").normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
@@ -980,7 +990,7 @@ function infoLines(p){
     d.chips.length ? h("div",{class:"chips",style:"justify-content:center"}, d.chips) : null, d.texts,
     fieldsOf().length && !d.chips.length && !d.texts.length ? h("span",{class:"role"},"Nessuna informazione aggiuntiva indicata") : null);
 }
-// Righe del punteggio «Super hard» per un campo della scheda
+// Righe del punteggio «Super Hard» per un campo della scheda
 // La scheda della persona contiene una risposta per questo campo?
 function hasAnswer(f, t){
   if (f.type==="text") return !!textOf(f, t);
@@ -1037,7 +1047,7 @@ function revealCard(p, withPhoto){
 
 const KINDS = [{id:"10",label:"10 domande"},{id:"20",label:"20 domande"},{id:"all",label:"Completo"}];
 const kindLabel = k => k==="all" ? "Completo" : k + " domande";
-const modeLabel = id => (MODES.find(m=>m.id===id)||{}).label || id;
+const modeLabel = id => { const m = MODES.find(m=>m.id===id); return m ? m.level + " · " + m.label : id; };
 const game = {
   mode:"photo", kind:"10", phase:"setup", rounds:[], i:0, score:0, max:0, answered:false, t0:0, tEnd:0, saved:false,
   reset(){ this.phase="setup"; this.rounds=[]; this.i=0; this.score=0; this.max=0; this.answered=false; this.tEnd=0; this.saved=false; },
@@ -1085,17 +1095,21 @@ function setupView(wrap){
   const nq = game.kind==="all" ? pool.length : +game.kind;
   wrap.append(h("div",{class:"q setup"},
     h("h2",{},"Nuova partita"),
-    h("div",{class:"role",style:"text-align:left"},"Tipo di gioco"),
-    h("div",{class:"choicecol"}, MODES.map(m => h("button",{class:"btn","aria-pressed":game.mode===m.id,onclick:()=>{game.mode=m.id;render();}}, m.label))),
+    h("div",{class:"steplabel"},"1 · Scegli il livello"),
+    h("div",{class:"levels",role:"radiogroup","aria-label":"Livello"}, MODES.map(m => h("button",{class:"level " + m.tag,role:"radio","aria-checked":game.mode===m.id,onclick:()=>{game.mode=m.id;render();}},
+      h("span",{class:"lvtag"}, m.level),
+      h("span",{class:"lvtitle"}, m.label),
+      h("span",{class:"lvdesc"}, m.desc),
+      h("span",{class:"lvcheck","aria-hidden":"true"}, game.mode===m.id ? "✓" : "")))),
     !enough ? h("div",{class:"empty"}, "Per questo gioco servono almeno " + cfg.min + " persone con foto. Ora ce ne sono " + pool.length + ". Aggiungi o approva qualche profilo con foto dall'Album!") : [
-      h("div",{class:"role",style:"text-align:left;margin-top:12px"},"Numero di domande"),
+      h("div",{class:"steplabel",style:"margin-top:16px"},"2 · Quante domande?"),
       h("div",{class:"choicerow"}, KINDS.map(k => {
         const disabled = k.id!=="all" && +k.id > game.available(k.id);
         return h("button",{class:"btn","aria-pressed":game.kind===k.id,disabled,onclick:()=>{game.kind=k.id;render();}},
           k.id==="all" ? "Completo (" + pool.length + ")" : k.label);
       })),
       h("div",{class:"role",style:"margin-top:10px"}, game.kind==="all" ? "Tutte le " + pool.length + " persone, in ordine casuale." : nq + " persone scelte a caso."),
-      h("button",{class:"btn primary",style:"margin-top:14px;width:100%",onclick:()=>{game.start();render();}},"Inizia"),
+      h("button",{class:"btn primary",style:"margin-top:14px;width:100%;font-size:18px;padding:14px",onclick:()=>{game.start();render();}},"Inizia · " + cfg.level),
       h("div",{class:"role",style:"margin-top:8px"},"Per la classifica si confrontano partite con lo stesso tipo e lo stesso numero di domande.")]));
 }
 
