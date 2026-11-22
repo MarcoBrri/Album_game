@@ -159,7 +159,8 @@ begin
   if p_name is null or char_length(btrim(p_name)) not between 1 and 80 then raise exception 'invalid_name'; end if;
   if char_length(coalesce(p_nick,'')) > 40 then raise exception 'invalid_nick'; end if;
   if not public.valid_person_data(v_fields, coalesce(p_data, '{}'::jsonb)) then raise exception 'invalid_data'; end if;
-  if coalesce(p_photo,'') <> '' and (left(p_photo, 23) <> 'data:image/jpeg;base64,' or char_length(p_photo) > 150000)
+  if coalesce(p_photo,'') = '' then raise exception 'photo_required'; end if;
+  if left(p_photo, 23) <> 'data:image/jpeg;base64,' or char_length(p_photo) > 150000
     then raise exception 'invalid_photo'; end if;
   if (select count(*) from public.people where club_id = v_club and status = 'pending') >= 200
     then raise exception 'too_many_pending'; end if;

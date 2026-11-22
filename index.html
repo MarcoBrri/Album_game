@@ -879,6 +879,7 @@ function openForm(person){
   const inputs = fs.map(f => fieldInput(f, person ? (person.data||{})[f.id] : undefined));
   const err = h("div",{class:"err",role:"alert"});
   const pic = h("div",{class:"photo"});
+  let picWrap = null;
   const drawPic = () => { pic.replaceChildren(); if (photo) pic.append(h("img",{src:photo,alt:""})); else pic.textContent = initials(name.value); };
   drawPic();
   name.addEventListener("input", ()=>{ if(!photo) drawPic(); });
@@ -886,7 +887,7 @@ function openForm(person){
   file.addEventListener("change", async ()=>{
     err.textContent = "";
     if (!file.files[0]) return;
-    try { photo = await fileToSquareJpeg(file.files[0]); drawPic(); }
+    try { photo = await fileToSquareJpeg(file.files[0]); drawPic(); if (picWrap) picWrap.classList.remove("missing"); }
     catch(e){ err.textContent = "Non riesco a leggere questa immagine."; }
   });
   const lg = h("input",{type:"checkbox",checked:!!(person && person.legend)});
@@ -903,6 +904,7 @@ function openForm(person){
 
   save.onclick = async () => {
     err.textContent = "";
+    if (!photo){ err.textContent = "Aggiungi una foto: serve per il gioco."; picWrap.classList.add("missing"); return; }
     if (!name.value.trim()){ err.textContent = "Inserisci nome e cognome."; return; }
     save.disabled = true; save.textContent = "Salvo…";
     try {
@@ -918,9 +920,9 @@ function openForm(person){
   const box = h("div",{class:"modal",role:"dialog","aria-modal":"true","aria-label":"Profilo"},
     h("h2",{}, person ? "Modifica profilo" : "Aggiungi una persona"),
     !person && !admin ? h("div",{class:"role",style:"margin:-6px 0 12px"},"Il profilo comparirà nella directory dopo l'approvazione dell'amministratore. Aggiungi solo persone che sono d'accordo a comparire. ", h("button",{class:"linkbtn",type:"button",onclick:showPrivacy},"Privacy")) : null,
-    h("div",{class:"field"}, h("div",{class:"pic"}, pic,
+    picWrap = h("div",{class:"field"}, h("div",{class:"pic"}, pic,
       h("div",{}, h("button",{class:"btn",type:"button",onclick:()=>file.click()}, photo?"Cambia foto":"Scegli una foto"), file,
-        h("div",{class:"role",style:"margin-top:6px"},"Meglio un volto ben visibile, da vicino.")))),
+        h("div",{class:"role",style:"margin-top:6px"},"Obbligatoria. Meglio un volto ben visibile, da vicino.")))),
     h("div",{class:"field"}, h("label",{},"Nome e cognome"), name),
     useNick ? h("div",{class:"field"}, h("label",{},"Soprannome"), nick) : null,
     fs.map((f,i) => h("div",{class:"field"}, fieldLabel(f), inputs[i].el)),
