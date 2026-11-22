@@ -130,6 +130,8 @@ details.sedwrap{border-top:1px solid var(--line);padding-top:10px}
 .pagehead{display:flex;align-items:center;gap:10px;margin:0 0 12px}.pagehead h2{margin:0;font-size:20px}
 .adminbox{margin-top:22px}.adminrow{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .sharebtn{width:100%;margin:6px 0 4px}
+.hint{font-weight:400;color:var(--muted);font-size:13px}
+.field.missing{outline:2px solid var(--bad);outline-offset:4px;border-radius:8px}
 .collect{text-align:center;margin:4px 0 16px}.collect h2{margin:6px 0}
 .switch{display:flex;align-items:center;gap:10px;margin:10px 0 4px;font-size:15px;cursor:pointer}
 .switch input{appearance:none;-webkit-appearance:none;width:44px;height:26px;border-radius:999px;background:var(--line);position:relative;flex:none;cursor:pointer;transition:background .15s}
@@ -187,22 +189,29 @@ const fieldsOf = () => (state.company && state.company.fields) || [];
 const hasSub = o => arr(o.sub).length > 0;
 const textOf = (f, p) => f.type==="text" ? String((p.data||{})[f.id]||"").trim() : "";
 // Etichette da mostrare per un campo a scelta: prima i dettagli scelti (es. la carica), poi la scelta che ha dettagli ma senza dettaglio scelto, poi le altre.
-function chipLabels(f, p){
+// Etichette da mostrare per un campo a scelta. Con «detail» restituisce {label, sub} (sub = dettaglio scelto, es. la carica).
+function chipLabels(f, p, detail){
   if (f.type==="text") return [];
   const ids = arr((p.data||{})[f.id]);
-  const subs = [], bare = [], plain = [];
+  const out = [];
+  const yesNo = l => /^s[iì]$/i.test(l.trim()) ? f.label : l;
   for (const o of arr(f.options)){
     if (!ids.includes(o.id)) continue;
-    if (hasSub(o)){ const picked = o.sub.filter(s => ids.includes(s.id)); if (picked.length) subs.push(...picked.map(s=>s.label)); else bare.push(o.label); }
-    else plain.push(o.label);
+    const picked = hasSub(o) ? o.sub.filter(s => ids.includes(s.id)) : [];
+    if (picked.length) picked.forEach(s => out.push({label:s.label, sub:true}));
+    else if (/^no$/i.test(o.label.trim())) continue;
+    else out.push({label:yesNo(o.label), sub:false});
   }
-  return [...subs, ...bare, ...plain];
+  return detail ? out : out.map(x => x.label);
 }
 function searchText(p){ return [p.name, p.nick, ...fieldsOf().flatMap(f => [textOf(f,p), ...chipLabels(f,p)])].join(" ").toLowerCase(); }
 function detailBits(p){
   const fs = fieldsOf();
   return {
-    chips: fs.flatMap((f,i) => chipLabels(f,p).map(l => h("span",{class:"team f"+(i%3)}, l))),
+    chips: (() => {                       // prima i dettagli (es. la carica), poi il resto, nell'ordine dei campi
+      const all = fs.flatMap((f,i) => chipLabels(f,p,true).map(x => Object.assign({i}, x)));
+      return [...all.filter(x => x.sub), ...all.filter(x => !x.sub)].map(x => h("span",{class:"team f"+(x.i%3)}, x.label));
+    })(),
     texts: fs.filter(f => textOf(f,p)).map(f => h("div",{class:"role ftext"}, f.label + ": " + textOf(f,p)))
   };
 }
@@ -213,25 +222,33 @@ function fieldInput(f, initial){
     return {el:inp, controls:[inp], get:()=>inp.value.trim(), main:inp};
   }
   const ids = arr(initial), single = f.type==="single", gname = rid("g");
-  const none = single ? h("input",{type:"radio",name:gname,value:"",checked:!f.options.some(o=>ids.includes(o.id))}) : null;
   const entries = f.options.map(o => {
     const box = h("input",{type:single?"radio":"checkbox",name:single?gname:null,value:o.id,checked:ids.includes(o.id)});
     const subBoxes = arr(o.sub).map(s => h("input",{type:"checkbox",value:s.id,checked:ids.includes(s.id)}));
     const panel = subBoxes.length ? h("div",{class:"companel",style:"display:none"},
-      h("div",{class:"role",style:"margin-bottom:4px"}, "Per «" + o.label + "»"),
+      h("div",{class:"role",style:"margin-bottom:4px"}, "Per «" + o.label + "»" + (subBoxes.length > 1 ? " · puoi sceglierne più di una" : "")),
       h("div",{class:"checks col"}, o.sub.map((s,i) => h("label",{}, subBoxes[i], s.label)))) : null;
     return {o, box, subBoxes, panel};
   });
   const sync = () => entries.forEach(e => { if (e.panel) e.panel.style.display = e.box.checked ? "block" : "none"; });
   entries.forEach(e => e.box.addEventListener("change", sync));
-  if (none) none.addEventListener("change", sync);
   sync();
   return {
-    el: h("div",{}, h("div",{class:"checks"}, none ? h("label",{}, none, "Nessuna") : null, entries.map(e => h("label",{}, e.box, e.o.label))), entries.map(e => e.panel)),
-    controls: [none, ...entries.flatMap(e => [e.box, ...e.subBoxes])].filter(Boolean),
-    get: () => entries.flatMap(e => e.box.checked ? [e.o.id, ...e.subBoxes.filter(b => b.checked).map(b => b.value)] : [])
+    el: h("div",{}, h("div",{class:"checks"}, entries.map(e => h("label",{}, e.box, e.o.label))), entries.map(e => e.panel)),
+    controls: entries.flatMap(e => [e.box, ...e.subBoxes]),
+    get: () => entries.flatMap(e => e.box.checked ? [e.o.id, ...e.subBoxes.filter(b => b.checked).map(b => b.value)] : []),
+    // Messaggio se manca una risposta (scelta, o dettaglio della scelta), altrimenti null
+    missing: () => {
+      const on = entries.filter(e => e.box.checked);
+      if (!on.length) return "«" + f.label + "»: scegli una risposta.";
+      const e = on.find(e => e.subBoxes.length && !e.subBoxes.some(b => b.checked));
+      return e ? "«" + f.label + "» → «" + e.o.label + "»: scegli anche un'opzione dall'elenco." : null;
+    }
   };
 }
+// Indicazione breve sotto il nome del campo
+const choiceHint = f => f.type==="multi" ? "Puoi sceglierne più di una" : f.type==="single" ? "Una sola risposta" : "";
+const fieldLabel = f => h("label",{}, f.label, choiceHint(f) ? h("span",{class:"hint"}, " · " + choiceHint(f)) : null);
 const sortName = (a,b) => (a.name||"").localeCompare(b.name||"", "it", {sensitivity:"base"});
 function photoEl(p){
   const box = h("div", {class:"photo"});
@@ -876,7 +893,7 @@ function openForm(person){
         h("div",{class:"role",style:"margin-top:6px"},"Meglio un volto ben visibile, da vicino.")))),
     h("div",{class:"field"}, h("label",{},"Nome e cognome"), name),
     useNick ? h("div",{class:"field"}, h("label",{},"Soprannome"), nick) : null,
-    fs.map((f,i) => h("div",{class:"field"}, h("label",{}, f.label), inputs[i].el)),
+    fs.map((f,i) => h("div",{class:"field"}, fieldLabel(f), inputs[i].el)),
     err,
     h("div",{class:"actions"}, del, h("button",{class:"btn",onclick:close},"Annulla"), save));
   function thanks(){
@@ -931,6 +948,12 @@ function infoLines(p){
     fieldsOf().length && !d.chips.length && !d.texts.length ? h("span",{class:"role"},"Nessuna informazione aggiuntiva indicata") : null);
 }
 // Righe del punteggio «Super hard» per un campo della scheda
+// La scheda della persona contiene una risposta per questo campo?
+function hasAnswer(f, t){
+  if (f.type==="text") return !!textOf(f, t);
+  const v = arr((t.data||{})[f.id]);
+  return arr(f.options).some(o => v.includes(o.id));
+}
 function fieldRows(f, t, input){
   const rows = [];
   if (f.type==="text"){
@@ -940,6 +963,17 @@ function fieldRows(f, t, input){
     return rows;
   }
   const want = arr((t.data||{})[f.id]), got = input.get();
+  if (f.type==="single"){
+    const wo = f.options.find(o => want.includes(o.id)), go = f.options.find(o => got.includes(o.id));
+    if (!wo) return rows;
+    const ws = hasSub(wo) ? wo.sub.filter(x => want.includes(x.id)) : [];
+    if (!ws.length){ rows.push({label:f.label, yours:go?go.label:"—", right:wo.label, pts:go===wo?1:0, max:1}); return rows; }
+    rows.push({label:f.label, yours:go?go.label:"—", right:wo.label, pts:go===wo?0.5:0, max:0.5});
+    const gs = go===wo ? wo.sub.filter(x => got.includes(x.id)) : [];
+    const same = gs.length===ws.length && ws.every(x => gs.includes(x));
+    rows.push({label:"↳ Dettaglio", yours:gs.map(x=>x.label).join(", ")||"—", right:ws.map(x=>x.label).join(", "), pts:same?0.5:0, max:0.5});
+    return rows;
+  }
   const lab = id => { for (const o of f.options){ if (o.id===id) return o.label; for (const s of arr(o.sub)) if (s.id===id) return s.label; } return id; };
   const plain = f.options.filter(o => !hasSub(o)), withSub = f.options.filter(hasSub);
   const wp = plain.filter(o => want.includes(o.id)).map(o => o.id), gp = plain.filter(o => got.includes(o.id)).map(o => o.id);
@@ -1097,12 +1131,18 @@ function gameView(){
     const name = h("input",{type:"text",maxlength:"80",autocomplete:"off","aria-label":"Nome e cognome"});
     const useNick = !!(state.company && state.company.useNick);
     const nick = h("input",{type:"text",maxlength:"40",autocomplete:"off","aria-label":"Soprannome"});
-    const fs = fieldsOf();
+    const fs = fieldsOf().filter(f => hasAnswer(f, t));      // si chiede solo ciò che la scheda della persona contiene
     const inputs = fs.map(f => fieldInput(f));
     const check = h("button",{class:"btn primary"},"Verifica la scheda");
+    const need = h("div",{class:"err",role:"alert"});
 
     const submit = () => {
       if (game.answered) return;
+      const miss = inputs.map(x => x.missing ? x.missing() : null);
+      fieldBoxes.forEach((b,i) => b.classList.toggle("missing", !!miss[i]));
+      const first = miss.find(Boolean);
+      if (first){ need.textContent = first; const k = miss.findIndex(Boolean); if (fieldBoxes[k].scrollIntoView) fieldBoxes[k].scrollIntoView({block:"center",behavior:"smooth"}); return; }
+      need.textContent = "";
       const rows = [];
       rows.push({label:"Nome e cognome", yours:name.value.trim()||"—", right:t.name, pts:judgeText(name.value, t.name), max:1});
       if (useNick && t.nick) rows.push({label:"Soprannome", yours:nick.value.trim()||"—", right:"«"+t.nick+"»", pts:judgeText(nick.value, t.nick), max:1});
@@ -1125,12 +1165,13 @@ function gameView(){
     name.addEventListener("keydown", e => { if (e.key==="Enter") submit(); });
     nick.addEventListener("keydown", e => { if (e.key==="Enter") submit(); });
     inputs.forEach(x => { if (x.main) x.main.addEventListener("keydown", e => { if (e.key==="Enter") submit(); }); });
+    const fieldBoxes = fs.map((f,i) => h("div",{class:"field"}, fieldLabel(f), inputs[i].el));
+    fieldBoxes.forEach(b => b.addEventListener("change", () => { b.classList.remove("missing"); need.textContent = ""; }));
     body = [photoEl(t), h("h2",{},"Compila la scheda di questa persona"),
       h("div",{class:"hardform"},
         h("div",{class:"field"}, h("label",{},"Nome e cognome"), name),
         useNick ? h("div",{class:"field"}, h("label",{},"Soprannome (se ne ha uno)"), nick) : null,
-        fs.map((f,i) => h("div",{class:"field"}, h("label",{}, f.label), inputs[i].el)),
-        check)];
+        fieldBoxes, need, check)];
   }
   wrap.append(
     h("div",{class:"prog"}, h("span",{},"Domanda " + (game.i+1) + " di " + game.rounds.length), h("span",{},"Punti: " + fmt(game.score))),
