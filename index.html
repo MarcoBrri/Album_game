@@ -1162,7 +1162,10 @@ function gameView(){
   const legendMsg = () => t.legend ? h("div",{class:"legendmsg"}, "✨ Era una Legend! Punti doppi", t.legendNote ? h("div",{class:"role"}, t.legendNote) : null) : null;
   const finish = (pts, max, ...nodes) => {
     if (game.answered) return; game.answered = true; game.score += pts; game.max += max;
-    if (t.legend) legendTargets.concat(qPhoto ? [qPhoto] : []).forEach(legendize);
+    if (t.legend) legendTargets.concat(qPhoto ? [qPhoto] : []).forEach(el => {
+      legendize(el);
+      if (!el.classList.contains("small")) el.append(legendBadge());   // etichetta «★ Legend» sulla foto, dopo la risposta
+    });
     fb.replaceChildren(legendMsg() || "", ...nodes.filter(Boolean), next); next.focus();
     if (fb.scrollIntoView) fb.scrollIntoView({block:"nearest",behavior:"smooth"});
   };
@@ -1188,7 +1191,7 @@ function gameView(){
       optEls.push([p, el]); opts.append(el);
     }
     if (game.mode==="photo") qPhoto = photoEl(t);
-    body = [game.mode==="photo" ? [qPhoto, h("h2",{},"Chi è questa persona?")] : h("h2",{}, "Qual è la foto di " + fullLabel(t) + "?"), opts];
+    body = [game.mode==="photo" ? [qPhoto, h("h2",{},"Chi è?")] : h("h2",{}, "Seleziona la foto di " + t.name + "."), opts];
 
   } else { // hard: compila tutta la scheda
     const name = h("input",{type:"text",maxlength:"80",autocomplete:"off","aria-label":"Nome e cognome"});
