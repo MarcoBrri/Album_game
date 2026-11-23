@@ -955,8 +955,8 @@ function openForm(person){
 
 /* ---------- game ---------- */
 const MODES = [
-  {id:"photo", level:"Facile",     tag:"easy", label:"Foto → Nome",     desc:"Vedi una foto e scegli il nome giusto tra quattro.", min:4, rounds:10},
-  {id:"name",  level:"Medio",      tag:"mid",  label:"Nome → Foto",     desc:"Leggi un nome e trova la sua foto tra quattro.", min:4, rounds:10},
+  {id:"name",  level:"Facile",     tag:"easy", label:"Nome → Foto",     desc:"Leggi un nome e trova la sua foto tra quattro.", min:4, rounds:10},
+  {id:"photo", level:"Medio",      tag:"mid",  label:"Foto → Nome",     desc:"Vedi una foto e scegli il nome giusto tra quattro.", min:4, rounds:10},
   {id:"hard",  level:"Super Hard", tag:"hard", label:"Scheda completa", desc:"Vedi una foto e compila tutta la scheda: nome e informazioni.", min:1, rounds:5}
 ];
 const fmt = n => String(Math.round(n*10)/10).replace(".", ",");
@@ -1049,7 +1049,7 @@ const KINDS = [{id:"10",label:"10 domande"},{id:"20",label:"20 domande"},{id:"al
 const kindLabel = k => k==="all" ? "Completo" : k + " domande";
 const modeLabel = id => { const m = MODES.find(m=>m.id===id); return m ? m.level + " · " + m.label : id; };
 const game = {
-  mode:"photo", kind:"10", phase:"setup", rounds:[], i:0, score:0, max:0, answered:false, t0:0, tEnd:0, saved:false,
+  mode:"name", kind:"10", phase:"setup", rounds:[], i:0, score:0, max:0, answered:false, t0:0, tEnd:0, saved:false,
   reset(){ this.phase="setup"; this.rounds=[]; this.i=0; this.score=0; this.max=0; this.answered=false; this.tEnd=0; this.saved=false; },
   inProgress(){ return this.phase==="play" && this.i < this.rounds.length && (this.i>0 || this.answered); },
   pool(){ return state.people.filter(p=>p.photo && p.name && p.approved !== false); },
@@ -1244,7 +1244,7 @@ function gameView(){
 }
 
 /* ---------- classifica ---------- */
-const board = { mode:"photo", kind:"10" };
+const board = { mode:"name", kind:"10" };
 function fmtTime(s){ return Math.floor(s/60) + ":" + String(s%60).padStart(2,"0"); }
 function boardView(){
   const wrap = h("div",{class:"game board"});
