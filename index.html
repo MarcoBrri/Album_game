@@ -148,6 +148,8 @@ details.sedwrap{border-top:1px solid var(--line);padding-top:10px}
 @keyframes twinkle{0%,100%{opacity:0;transform:translate(-50%,-50%) scale(.2) rotate(0)}45%{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(45deg)}60%{opacity:.9}}
 @media (prefers-reduced-motion:reduce){.spk{animation:none;opacity:.85;transform:translate(-50%,-50%) scale(.8)}}
 .legendbadge{position:absolute;top:8px;left:8px;z-index:3;background:linear-gradient(135deg,#b8860b,#f7d774);color:#3b2c00;font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+.minorbadge{position:absolute;top:8px;right:8px;z-index:3;background:#5b7fd9;color:#fff;font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px}
+.card{position:relative}
 .legendnote{font-size:13px;font-style:italic;color:#9c7a12;margin-top:2px}
 @media (prefers-color-scheme:dark){.legendnote{color:#f0c94a}}
 .legendmsg{font-weight:700;color:#9c7a12;margin-bottom:6px}
@@ -294,7 +296,7 @@ const SLUG_RE = /^[a-z0-9][a-z0-9-]{2,60}$/;
 const state = { recovery:false, people: [], loaded:false, admin:false, shared:true, view:"dir", q:"", slug:null, company:null, notFound:false, session:null, authMsg:"", configMissing:false };
 let sb = null, routeToken = 0;
 const isAdmin = () => !!state.admin;
-const fromRow = r => ({ id:r.id, name:r.name, nick:r.nick||"", data:(r.data && typeof r.data==="object") ? r.data : {}, photo:r.photo||"", legend:!!r.legend, legendNote:r.legend_note||"", approved: r.status ? r.status==="approved" : true });
+const fromRow = r => ({ id:r.id, name:r.name, nick:r.nick||"", data:(r.data && typeof r.data==="object") ? r.data : {}, photo:r.photo||"", legend:!!r.legend, legendNote:r.legend_note||"", minor:r.minor===true ? true : r.minor===false ? false : null, approved: r.status ? r.status==="approved" : true });
 
 function slugify(name){
   const base = name.normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase()
@@ -308,7 +310,7 @@ async function loadPeople(){
   if (!state.company) return;
   let rows = [];
   if (state.admin){
-    const { data, error } = await sb.from("people").select("id,name,nick,data,photo,status,legend,legend_note").eq("club_id", state.company.id).order("name");
+    const { data, error } = await sb.from("people").select("id,name,nick,data,photo,status,legend,legend_note,minor").eq("club_id", state.company.id).order("name");
     if (error) throw error; rows = data || [];
   } else {
     const { data, error } = await sb.rpc("club_members", { p_slug: state.slug });
@@ -424,11 +426,12 @@ async function saveStructure(struct){
 async function savePerson(id, d){
   const row = { name:d.name, nick:d.nick||"", data:d.data||{}, photo:d.photo||"", status: d.approved===false ? "pending" : "approved" };
   if (!state.admin){
-    const { error } = await sb.rpc("submit_member", { p_slug:state.slug, p_name:row.name, p_nick:row.nick, p_data:row.data, p_photo:row.photo, p_consent:!!d.consent });
+    const { error } = await sb.rpc("submit_member", { p_slug:state.slug, p_name:row.name, p_nick:row.nick, p_data:row.data, p_photo:row.photo, p_consent:!!d.consent, p_minor:d.minor });
     if (error) throw error; return;
   }
   row.updated_at = new Date().toISOString();
   if (!id && d.consent) row.consent_at = new Date().toISOString();
+  if (d.minor === true || d.minor === false) row.minor = d.minor;
   if (d.legend !== undefined){ row.legend = !!d.legend; row.legend_note = d.legend ? (d.legendNote||"").trim().slice(0,80) : ""; }
   const res = id ? await sb.from("people").update(row).eq("id", id)
                  : await sb.from("people").insert(Object.assign({club_id: state.company.id}, row));
@@ -675,7 +678,7 @@ function showPrivacy(){
       h("p",{},"Questo album raccoglie, per ogni persona, la foto, il nome e le informazioni previste dalla scheda del gruppo."),
       h("p",{}, h("strong",{},"Chi vede i dati: "), "chiunque abbia il link di questo gruppo. Il link non è pubblicato da nessuna parte, ma può essere inoltrato: condividilo solo con i membri."),
       h("p",{}, h("strong",{},"Chi decide: "), "i profili proposti compaiono solo dopo l'approvazione dell'amministratore del gruppo, che può modificarli o eliminarli in qualsiasi momento."),
-      h("p",{}, h("strong",{},"Consenso: "), "chi crea una scheda conferma che la persona è d'accordo a comparire (data e ora della conferma vengono registrate). Aggiungi solo persone che sono d'accordo a comparire, con una foto che hanno scelto o approvato."),
+      h("p",{}, h("strong",{},"Consenso: "), "chi crea una scheda conferma che la persona è d'accordo a comparire; per chi ha meno di 18 anni conferma il consenso di un genitore (data e ora della conferma vengono registrate). Aggiungi solo persone che sono d'accordo a comparire, con una foto che hanno scelto o approvato."),
       h("p",{}, h("strong",{},"Rimozione: "), "per correggere o far togliere un profilo (il tuo o di altri), rivolgiti all'amministratore del gruppo."),
       h("p",{}, h("strong",{},"Dove sono i dati: "), "in un database Supabase con server nell'Unione Europea (Irlanda). Il nome che scrivi in classifica resta salvato anche nel tuo browser.")),
     h("div",{class:"actions"}, h("button",{class:"btn primary",onclick:close},"Chiudi"))));
@@ -687,7 +690,7 @@ async function backupSql(){
   const cid = state.company.id;
   const [c, p, sc] = await Promise.all([
     sb.from("clubs").select("id,slug,name,fields,use_nick,created_at").eq("id", cid).maybeSingle(),
-    sb.from("people").select("id,name,nick,data,photo,status,legend,legend_note,consent_at,created_at,updated_at").eq("club_id", cid).order("name"),
+    sb.from("people").select("id,name,nick,data,photo,status,legend,legend_note,consent_at,minor,created_at,updated_at").eq("club_id", cid).order("name"),
     sb.from("scores").select("id,player,mode,kind,n,score,max,seconds,created_at").eq("club_id", cid)]);
   for (const r of [c,p,sc]) if (r.error) throw r.error;
   const q = v => v == null ? "null" : "'" + String(v).replace(/'/g, "''") + "'";
@@ -701,8 +704,8 @@ async function backupSql(){
   L.push("begin;");
   L.push("insert into public.clubs (id, slug, name, fields, use_nick, owner_id, created_at) values (" + [q(club.id), q(club.slug), q(club.name), j(club.fields), club.use_nick ? "true" : "false",
     "(select id from auth.users where lower(email) = lower(" + q(email) + "))", q(club.created_at)].join(", ") + ") on conflict (id) do nothing;");
-  for (const r of p.data) L.push("insert into public.people (id, club_id, name, nick, data, photo, status, legend, legend_note, consent_at, created_at, updated_at) values (" +
-    [q(r.id), q(club.id), q(r.name), q(r.nick), j(r.data), q(r.photo), q(r.status), r.legend ? "true" : "false", q(r.legend_note||""), q(r.consent_at), q(r.created_at), q(r.updated_at)].join(", ") + ") on conflict (id) do nothing;");
+  for (const r of p.data) L.push("insert into public.people (id, club_id, name, nick, data, photo, status, legend, legend_note, consent_at, minor, created_at, updated_at) values (" +
+    [q(r.id), q(club.id), q(r.name), q(r.nick), j(r.data), q(r.photo), q(r.status), r.legend ? "true" : "false", q(r.legend_note||""), q(r.consent_at), r.minor===true ? "true" : r.minor===false ? "false" : "null", q(r.created_at), q(r.updated_at)].join(", ") + ") on conflict (id) do nothing;");
   for (const r of sc.data) L.push("insert into public.scores (id, club_id, player, mode, kind, n, score, max, seconds, created_at) values (" +
     [q(r.id), q(club.id), q(r.player), q(r.mode), q(r.kind), r.n, r.score, r.max, r.seconds, q(r.created_at)].join(", ") + ") on conflict (id) do nothing;");
   L.push("commit;");
@@ -816,6 +819,7 @@ function personCard(p, actions){
   const d = detailBits(p);
   const card = h("div",{class:"card"},
     p.legend ? legendBadge() : null,
+    isAdmin() && p.minor ? h("span",{class:"minorbadge"},"Minorenne") : null,
     photoEl(p),
     h("div",{class:"info"},
       h("div",{class:"name"}, p.name||"—"),
@@ -893,11 +897,22 @@ function openForm(person){
   let picWrap = null;
   // Conferma privacy e consenso: solo quando si crea una nuova scheda
   const consent = h("input",{type:"checkbox"});
-  const consentBox = person ? null : h("div",{class:"field consent"}, h("label",{class:"checkline"}, consent,
-    h("span",{style:"font-weight:400"}, "Ho letto l'",
-      h("button",{class:"linkbtn",type:"button",style:"font-size:inherit",onclick:e=>{ e.preventDefault(); showPrivacy(); }},"informativa sulla privacy"),
-      " e confermo che la persona di questa scheda (io stesso/a o un'altra persona) è d'accordo a comparire nell'album con foto e dati.")));
-  consent.addEventListener("change", () => { if (consentBox) consentBox.classList.remove("missing"); });
+  const mg = rid("m");
+  const minYes = h("input",{type:"radio",name:mg,value:"1",checked:!!(person && person.minor===true)});
+  const minNo  = h("input",{type:"radio",name:mg,value:"0",checked:!!(person && person.minor===false)});
+  const minorVal = () => minYes.checked ? true : minNo.checked ? false : null;
+  const showMinor = !person || isAdmin();            // alla creazione per tutti; in modifica solo per l'admin
+  const minorBox = showMinor ? h("div",{class:"field"}, h("label",{},"La persona ha meno di 18 anni?"),
+    h("div",{class:"checks"}, h("label",{}, minYes, "Sì"), h("label",{}, minNo, "No"))) : null;
+  const consentText = h("span",{});
+  const privacyLink = () => h("button",{class:"linkbtn",type:"button",style:"font-size:inherit",onclick:e=>{ e.preventDefault(); showPrivacy(); }},"informativa sulla privacy");
+  const drawConsent = () => consentText.replaceChildren("Ho letto l'", privacyLink(),
+    minYes.checked ? " e confermo che un genitore (o chi ne ha la responsabilità) ha dato il consenso a far comparire questa persona nell'album con foto e dati."
+                   : " e confermo che la persona di questa scheda (io stesso/a o un'altra persona) è d'accordo a comparire nell'album con foto e dati.");
+  drawConsent();
+  const consentBox = person ? null : h("div",{class:"field consent"}, h("label",{class:"checkline"}, consent, h("span",{style:"font-weight:400"}, consentText)));
+  [minYes, minNo].forEach(r => r.addEventListener("change", () => { if (minorBox) minorBox.classList.remove("missing"); consent.checked = false; drawConsent(); }));
+  consent.addEventListener("change", () => { if (consentBox) consentBox.classList.remove("missing"); if (consent.checked && /privacy|18 anni/.test(err.textContent)) err.textContent = ""; });
   const drawPic = () => { pic.replaceChildren(); if (photo) pic.append(h("img",{src:photo,alt:""})); else pic.textContent = initials(name.value); };
   drawPic();
   name.addEventListener("input", ()=>{ if(!photo) drawPic(); });
@@ -923,12 +938,13 @@ function openForm(person){
   save.onclick = async () => {
     err.textContent = "";
     if (!photo){ err.textContent = "Aggiungi una foto."; picWrap.classList.add("missing"); return; }
+    if (!person && minorVal()===null){ err.textContent = "Indica se la persona ha meno di 18 anni."; minorBox.classList.add("missing"); return; }
     if (consentBox && !consent.checked){ err.textContent = "Conferma la privacy e il consenso della persona."; consentBox.classList.add("missing"); return; }
     if (!name.value.trim()){ err.textContent = "Inserisci nome e cognome."; return; }
     save.disabled = true; save.textContent = "Salvo…";
     try {
       const data = {}; fs.forEach((f,i) => { const v = inputs[i].get(); if (f.type==="text" ? v : v.length) data[f.id] = v; });
-      const extra = Object.assign({consent: !person && consent.checked}, admin ? {legend:lg.checked, legendNote:lgNote.value} : {});
+      const extra = Object.assign({consent: !person && consent.checked, minor: showMinor ? minorVal() : undefined}, admin ? {legend:lg.checked, legendNote:lgNote.value} : {});
       await savePerson(id, Object.assign({name:name.value.trim(), nick:useNick ? nick.value.trim() : "", data, photo, approved: person ? isApproved(person) : admin, updated:Date.now()}, extra));
       if (!admin && !person) { thanks(); } else close();
     } catch(e){
@@ -945,7 +961,7 @@ function openForm(person){
     h("div",{class:"field"}, h("label",{},"Nome e cognome"), name),
     useNick ? h("div",{class:"field"}, h("label",{},"Soprannome"), nick) : null,
     fs.map((f,i) => h("div",{class:"field"}, fieldLabel(f), inputs[i].el)),
-    consentBox,
+    minorBox, consentBox,
     admin ? h("div",{class:"field legendopt"}, h("label",{class:"checkline"}, lg, h("span",{}, "★ Legend", h("span",{class:"hint"}," · figurina speciale con cornice d'oro, punti doppi nei giochi"))), lgNoteBox) : null,
     err,
     h("div",{class:"actions"}, del, h("button",{class:"btn",onclick:close},"Annulla"), save));

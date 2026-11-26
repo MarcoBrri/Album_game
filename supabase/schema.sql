@@ -105,6 +105,7 @@ create table if not exists public.people (
   legend     boolean not null default false,
   legend_note text not null default '' check (char_length(legend_note) <= 80),
   consent_at timestamptz,
+  minor      boolean,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -150,13 +151,14 @@ language sql stable security definer set search_path = public as $$
   order by p.name;
 $$;
 
-create or replace function public.submit_member(p_slug text, p_name text, p_nick text, p_data jsonb, p_photo text, p_consent boolean)
+create or replace function public.submit_member(p_slug text, p_name text, p_nick text, p_data jsonb, p_photo text, p_consent boolean, p_minor boolean)
 returns void
 language plpgsql security definer set search_path = public as $$
 declare v_club uuid; v_fields jsonb; v_nick boolean;
 begin
   select id, fields, use_nick into v_club, v_fields, v_nick from public.clubs where slug = p_slug;
   if v_club is null then raise exception 'club_not_found'; end if;
+  if p_minor is null then raise exception 'minor_required'; end if;
   if p_consent is not true then raise exception 'consent_required'; end if;
   if p_name is null or char_length(btrim(p_name)) not between 1 and 80 then raise exception 'invalid_name'; end if;
   if char_length(coalesce(p_nick,'')) > 40 then raise exception 'invalid_nick'; end if;
@@ -166,16 +168,16 @@ begin
     then raise exception 'invalid_photo'; end if;
   if (select count(*) from public.people where club_id = v_club and status = 'pending') >= 200
     then raise exception 'too_many_pending'; end if;
-  insert into public.people (club_id, name, nick, data, photo, status, consent_at)
+  insert into public.people (club_id, name, nick, data, photo, status, consent_at, minor)
   values (v_club, btrim(p_name), case when v_nick then btrim(coalesce(p_nick,'')) else '' end,
-          coalesce(p_data, '{}'::jsonb), p_photo, 'pending', now());
+          coalesce(p_data, '{}'::jsonb), p_photo, 'pending', now(), p_minor);
 end;
 $$;
 
 revoke all on function public.club_info(text), public.club_members(text),
-  public.submit_member(text,text,text,jsonb,text,boolean) from public;
+  public.submit_member(text,text,text,jsonb,text,boolean,boolean) from public;
 grant execute on function public.club_info(text), public.club_members(text),
-  public.submit_member(text,text,text,jsonb,text,boolean) to anon, authenticated;
+  public.submit_member(text,text,text,jsonb,text,boolean,boolean) to anon, authenticated;
 
 
 -- ───────────── Classifica ─────────────
